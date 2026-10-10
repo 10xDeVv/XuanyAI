@@ -80,6 +80,8 @@ The added compiled-worker regression uses independently labeled colors from the 
 
 A local browser MediaStream streamed the exact supplied image at 80% width in a 720×1280 portrait frame through the production camera component, worker, Session, and review. It captured all six faces with the correct 54 colors and produced **32 verified quarter-turn steps**. No file picker was used, and the browser console reported no errors. Evidence: `artifacts/joined-net-camera-review.jpg` and `artifacts/joined-net-camera-solution.jpg`. Production web and sequential iOS/Android Hermes exports passed. The detector version is `821a256600d6f983`.
 
+The published application bundle, frame worker, detector JavaScript/WASM, and solver worker all match the tested export byte-for-byte and return HTTP 200 with the appropriate MIME types. The fresh immutable deployment URL was provided for an iPhone retest; that result remains pending.
+
 ## Photo import
 
 The picture importer reads six panels in 3×2 or 2×3 layouts, then requires face-name and orientation review. Recognition runs in the production browser WASM worker or the native detector on a separate worklet runtime. Native image decoding/cropping uses asynchronous Nitro Image operations; an explicit render applies iOS image orientation before cropping. Expo ImagePicker supplies the system selection UI ([official API documentation](https://docs.expo.dev/versions/latest/sdk/imagepicker/)).
@@ -96,6 +98,8 @@ The picture importer reads six panels in 3×2 or 2×3 layouts, then requires fac
 ## Builds and access
 
 - HTTPS preview: https://point-scan-solve-10xdevv--prototype.expo.app
+- Immutable joined-net correction: https://point-scan-solve-10xdevv--hfh248gc94.expo.app (source commit `cbe4583`).
+- Joined-net Android development build: https://expo.dev/accounts/xuanyai/projects/point-scan-solve/builds/82046d8c-c5e1-4c56-b514-41d8fc80d7e1 (submitted; completion and runtime testing pending).
 - Immutable portrait-camera correction: https://point-scan-solve-10xdevv--8hi1su9chu.expo.app (source commit `3233ab1`).
 - Portrait-camera Android development build: https://expo.dev/accounts/xuanyai/projects/point-scan-solve/builds/41eb5539-205d-4108-9fd9-25a8ab20e55d (submitted; completion and runtime testing pending).
 - Immutable unfolded-net deployment: https://point-scan-solve-10xdevv--mi91jas0ij.expo.app (source commit `20cb311`).

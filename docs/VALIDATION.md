@@ -56,6 +56,8 @@ Picture capture and review now require all nine independent sticker regions to s
 
 The browser MediaStream test captured a generated, known-valid net, assigned U/L/F/R/B/D correctly, validated all 54 colors, and generated 22 quarter-turn instructions (`artifacts/net-captured-review.jpg`, `artifacts/net-solution-camera.jpg`). The supplied cropped screenshot remained in scanning when streamed with padding at 640×480; the app requested clearer Front and Down grids because those faint white-square boundaries were incomplete at that scale (`artifacts/net-cropped-camera.jpg`). The direct 640×605 detector test requested Back instead. These differing requests demonstrate resolution sensitivity, not successful capture of the cropped example. Browser console reported no errors. Production web and both native Hermes exports passed; physical device camera testing is still pending.
 
+The unfolded-net update is published at the prototype alias. Its worker, detector JavaScript/WASM, and solver worker match the tested export byte-for-byte, return HTTP 200, and use the appropriate MIME types. Detector asset version: `753713471457fab2`. The refreshed published home screen loads without console errors. The generated complete test net is available locally at `artifacts/valid-net.png` for a paper/screen camera trial.
+
 ## Photo import
 
 The picture importer reads six panels in 3×2 or 2×3 layouts, then requires face-name and orientation review. Recognition runs in the production browser WASM worker or the native detector on a separate worklet runtime. Native image decoding/cropping uses asynchronous Nitro Image operations; an explicit render applies iOS image orientation before cropping. Expo ImagePicker supplies the system selection UI ([official API documentation](https://docs.expo.dev/versions/latest/sdk/imagepicker/)).
@@ -72,6 +74,8 @@ The picture importer reads six panels in 3×2 or 2×3 layouts, then requires fac
 ## Builds and access
 
 - HTTPS preview: https://point-scan-solve-10xdevv--prototype.expo.app
+- Immutable unfolded-net deployment: https://point-scan-solve-10xdevv--mi91jas0ij.expo.app (source commit `20cb311`).
+- Unfolded-net Android development build: https://expo.dev/accounts/xuanyai/projects/point-scan-solve/builds/d4e42edd-d4de-4879-bde7-e1fc6b18b0f5 (submitted; completion and runtime testing pending).
 - Immutable live-picture camera deployment: https://point-scan-solve-10xdevv--pmt7tl5pkm.expo.app (source commit `abe86eb`).
 - Live-picture Android development build: https://expo.dev/accounts/xuanyai/projects/point-scan-solve/builds/23607da4-caab-44b4-a413-d392975dcf35 (submitted; completion and runtime testing pending).
 - Immutable photo-import deployment: https://point-scan-solve-10xdevv--w3m8o1jwzl.expo.app (source commit `fbb0a0d`).

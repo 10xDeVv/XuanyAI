@@ -26,6 +26,8 @@ Verify that a repeated center color is captured spatially but rejected by cube v
 
 Also test the upright unfolded net U / L F R B / D on paper and a screen. Check that geometry assigns the correct face names and orientations. Crop or cover each face in turn; a confident five-face layout should request that face and never proceed to a solution. Repeat the reported case with the rightmost Back column cut off. Bring the full Back face back into view and require a new stable capture. Point at a 4×4 net and check that the app requests a 3×3 diagram rather than capturing a 3×3 subgrid.
 
+Repeat the complete test net in portrait and landscape phone orientations, with the sheet occupying roughly 60%, 80%, and 95% of the frame width. Record source and processed pixel dimensions and processing latency. The previous 640-pixel long-side limit erased white-square boundaries in portrait video. Picture frames now retain up to 1280 pixels; verify that all nine squares of every face remain independently visible. An auto-detected diagram must stay in picture mode through temporarily partial views, without switching back to lower-resolution cube scanning.
+
 ## Failure handling
 
 - Deny camera access, then grant it and retry.

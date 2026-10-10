@@ -64,7 +64,9 @@ The user subsequently confirmed that the complete test net also stalls with some
 
 Picture mode now retains up to 1280 pixels on the long side without upscaling the source. Physical cube frames retain their 640-pixel limit. Auto-detection locks the session into picture mode so partial subsequent frames cannot repeatedly lower resolution. Native frame output requests 1280 for pictures, and the native C++ wrapper no longer reduces those frames back to 640; this requires a new native build. Preview coordinates continue to use the dimensions actually sent to detection. The detector, nine-region requirement, confidence limits, and settling checks are unchanged.
 
-With that correction, the same browser MediaStream reaches six clear panels, review, and a valid 54-square state (`artifacts/portrait-camera-after.jpg`). This is a controlled before/after browser test, not an iPhone camera recording. Two added tests exercise portrait pixel data through the production worker and verify both exact state capture and rejection after covering the Back column, plus retention of picture mode through partial frames. Strict TypeScript and all 51 automated tests pass. Actual iPhone retesting, including latency from the larger frames, remains required. A distant diagram can still be too small; all six faces should fill most of the camera width.
+With that correction, the same browser MediaStream reaches six clear panels, review, a valid 54-square state, and 22 verified solution steps (`artifacts/portrait-camera-after.jpg`). This is a controlled before/after browser test, not an iPhone camera recording. Two added tests exercise portrait pixel data through the production worker and verify both exact state capture and rejection after covering the Back column, plus retention of picture mode through partial frames. Strict TypeScript, all 51 automated tests, production web export, and sequential iOS/Android Hermes exports pass. Native picture mode disables the preview-sized-buffer option and uses stable resolution objects to avoid rebuilding frame output during every observation. Actual iPhone retesting, including latency from the larger frames, remains required. A distant diagram can still be too small; all six faces should fill most of the camera width.
+
+Published application bundle `entry-770f545a6ad911d89ff88e29ea14f64b.js` matches the tested export byte-for-byte. The worker, detector JS/WASM, and solver worker also match; their detector version remains `753713471457fab2` because this browser fix changes frame acquisition, not the detector. The fresh immutable URL was supplied for the user's iPhone retest; its result is pending.
 
 ## Photo import
 
@@ -82,6 +84,8 @@ The picture importer reads six panels in 3×2 or 2×3 layouts, then requires fac
 ## Builds and access
 
 - HTTPS preview: https://point-scan-solve-10xdevv--prototype.expo.app
+- Immutable portrait-camera correction: https://point-scan-solve-10xdevv--8hi1su9chu.expo.app (source commit `3233ab1`).
+- Portrait-camera Android development build: https://expo.dev/accounts/xuanyai/projects/point-scan-solve/builds/41eb5539-205d-4108-9fd9-25a8ab20e55d (submitted; completion and runtime testing pending).
 - Immutable unfolded-net deployment: https://point-scan-solve-10xdevv--mi91jas0ij.expo.app (source commit `20cb311`).
 - Unfolded-net Android development build: https://expo.dev/accounts/xuanyai/projects/point-scan-solve/builds/d4e42edd-d4de-4879-bde7-e1fc6b18b0f5 (submitted; completion and runtime testing pending).
 - Immutable live-picture camera deployment: https://point-scan-solve-10xdevv--pmt7tl5pkm.expo.app (source commit `abe86eb`).

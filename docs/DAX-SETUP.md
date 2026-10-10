@@ -21,6 +21,8 @@ Use your own Expo login. The project is [@xuanyai/point-scan-solve](https://expo
 
 GitHub's **Code → Download ZIP** is an alternative to `git clone`. The cloud build needs the source folder, not the local `.tools`, `node_modules`, generated native directories, or cached SDKs. You do not need to install Xcode, OpenCV, or Emscripten to request this cloud build; its install hook prepares the native dependencies.
 
+If you cloned earlier, run `git pull` and `npm ci` before building. The photo solver adds `expo-image-picker`, so it requires a new native development client. Earlier APKs do not contain that module. The browser update is available without installing an app.
+
 ## 2. Register the test iPhones
 
 ```sh

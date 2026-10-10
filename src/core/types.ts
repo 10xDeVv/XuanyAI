@@ -12,6 +12,7 @@ export type PreviewTransform = {
   frameWidth: number; frameHeight: number;
   previewWidth: number; previewHeight: number;
   rotation: 0 | 90 | 180 | 270; mirrored: boolean;
+  fit?: 'cover' | 'contain';
 };
 export type ObservedFace = {
   colors: FaceGrid<CubeColor>;

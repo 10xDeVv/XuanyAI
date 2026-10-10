@@ -54,7 +54,7 @@ export default function CameraSurface(props:CameraSurfaceProps){
             const rect=element.getBoundingClientRect();
             const count=data.faces.filter(reliableFace).length;
             callbacks.current.onStatus(count?`${count} face${count===1?'':'s'} in view · Hold still`:data.faces.length?'Grid found · Adjust the light':'Looking for a 3 × 3 face');
-            callbacks.current.onObservation({...data,transform:{frameWidth:canvas.width,frameHeight:canvas.height,previewWidth:rect.width,previewHeight:rect.height,rotation:0,mirrored:false}} as CubeObservation);
+            callbacks.current.onObservation({...data,transform:{frameWidth:canvas.width,frameHeight:canvas.height,previewWidth:rect.width,previewHeight:rect.height,rotation:0,mirrored:false,fit:'contain'}} as CubeObservation);
           }
         };
         worker.onerror=()=>fail('The cube detector is unavailable. Reload the app and try again.');
@@ -82,5 +82,5 @@ export default function CameraSurface(props:CameraSurfaceProps){
     document.addEventListener('visibilitychange',visibility);void init();
     return()=>{cancelled=true;clearInterval(timer);clearTimeout(watchdog);worker?.terminate();release();if(video.current)video.current.srcObject=null;document.removeEventListener('visibilitychange',visibility);};
   },[props.active,props.facing]);
-  return <video ref={video} autoPlay playsInline muted aria-label="Live unmirrored cube camera" style={{width:'100%',height:'100%',position:'absolute',inset:0,objectFit:'cover',transform:'none'}}/>;
+  return <video ref={video} autoPlay playsInline muted aria-label="Live unmirrored cube camera" style={{width:'100%',height:'100%',position:'absolute',inset:0,objectFit:'contain',transform:'none'}}/>;
 }

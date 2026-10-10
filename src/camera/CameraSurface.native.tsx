@@ -26,7 +26,7 @@ export default function CameraSurface(props:CameraSurfaceProps){
   const receive=useCallback((json:string,timestamp:number,requestEpoch:number)=>{
     if(!mounted.current||requestEpoch!==epoch.current.value||!callbacks.current.active||AppState.currentState!=='active'||Date.now()-timestamp>1000)return;
     const result=JSON.parse(json);
-    callbacks.current.onObservation({...result,timestamp,transform:{frameWidth:result.width,frameHeight:result.height,previewWidth:layout.current.width,previewHeight:layout.current.height,rotation:0,mirrored:false}} as CubeObservation);
+    callbacks.current.onObservation({...result,timestamp,transform:{frameWidth:result.width,frameHeight:result.height,previewWidth:layout.current.width,previewHeight:layout.current.height,rotation:0,mirrored:false,fit:'contain'}} as CubeObservation);
   },[]);
   const fail=useCallback((message:string,requestEpoch?:number)=>{if(mounted.current&&(requestEpoch===undefined||requestEpoch===epoch.current.value))callbacks.current.onError(message);},[]);
   const output=useFrameOutput({
@@ -51,6 +51,6 @@ export default function CameraSurface(props:CameraSurfaceProps){
   const outputs=useMemo(()=>[output],[output]);
   useEffect(()=>{if(props.active&&hasPermission&&!device)props.onError('This camera is unavailable. Try the other camera.');},[props.active,hasPermission,device]);
   if(!hasPermission||!device)return <View style={StyleSheet.absoluteFill}/>;
-  return <Camera style={StyleSheet.absoluteFill} device={device} isActive={props.active&&foreground} outputs={outputs} mirrorMode="off" orientationSource="interface" resizeMode="cover"
+  return <Camera style={StyleSheet.absoluteFill} device={device} isActive={props.active&&foreground} outputs={outputs} mirrorMode="off" orientationSource="interface" resizeMode="contain"
     onLayout={e=>{layout.current=e.nativeEvent.layout;}} onPreviewStarted={()=>callbacks.current.onStatus('Camera ready')} onError={e=>fail(e.message)}/>;
 }

@@ -11,9 +11,9 @@ import {createSolver} from '../solver/createSolver';
 function Button({label,onPress,secondary=false,disabled=false}:{label:string;onPress:()=>void;secondary?:boolean;disabled?:boolean}){
   return <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={[s.button,secondary&&s.secondary,disabled&&{opacity:.45}]}><Text style={s.buttonText}>{label}</Text></Pressable>;
 }
-export function PhotoImport({onClose,onGuide,onScan}:{onClose:()=>void;onGuide:(state:CubeState)=>void;onScan:()=>void}){
+export function PhotoImport({onClose,onGuide,onScan,cameraRead,onRetake}:{onClose:()=>void;onGuide:(state:CubeState)=>void;onScan:()=>void;cameraRead?:PhotoRead;onRetake?:()=>void}){
   const [asset,setAsset]=useState<ImagePicker.ImagePickerAsset|null>(null),[layout,setLayout]=useState<PhotoLayout>(3);
-  const [read,setRead]=useState<PhotoRead|null>(null),[labels,setLabels]=useState([...PANEL_LABELS]),[turns,setTurns]=useState([0,0,0,0,0,0]);
+  const [read,setRead]=useState<PhotoRead|null>(cameraRead??null),[labels,setLabels]=useState([...PANEL_LABELS]),[turns,setTurns]=useState([0,0,0,0,0,0]);
   const [busy,setBusy]=useState(false),[picking,setPicking]=useState(false),[error,setError]=useState(''),[editing,setEditing]=useState<number|null>(null);
   const [solution,setSolution]=useState<{state:CubeState;moves:Move[]}|null>(null),[step,setStep]=useState(0);
   const request=useRef(0),controller=useRef<AbortController|null>(null),solver=useRef<SolverAdapter|null>(null),alive=useRef(true),uri=useRef('');
@@ -58,17 +58,19 @@ export function PhotoImport({onClose,onGuide,onScan}:{onClose:()=>void;onGuide:(
     else if(validation?.valid)onGuide(validation.state);
   };
   return <Modal visible animationType="slide" onRequestClose={onClose}><SafeAreaView style={s.page}>
-    <View style={s.nav}><Text style={s.brand}>point. <Text style={s.small}>/ PHOTO SOLVER</Text></Text><Button label="Close" secondary onPress={onClose}/></View>
+    <View style={s.nav}><Text style={s.brand}>point. <Text style={s.small}>/ {cameraRead?'CAMERA PICTURE':'PHOTO SOLVER'}</Text></Text><Button label="Close" secondary onPress={onClose}/></View>
     <ScrollView ref={scroll} contentContainerStyle={s.content}>
-      <Text style={s.kicker}>{solution?'YOUR NEXT TURN':'FROM PICTURE TO PLAN'}</Text>
-      <Text accessibilityRole="header" style={s.title}>{solution?'One turn at a time.':'Solve from a picture.'}</Text>
+      <Text style={s.kicker}>{solution?'YOUR NEXT TURN':cameraRead?'SIX PANELS CAPTURED':'FROM PICTURE TO PLAN'}</Text>
+      <Text accessibilityRole="header" style={s.title}>{solution?'One turn at a time.':cameraRead?'Picture captured.':'Solve from a picture.'}</Text>
       {!solution&&<>
+        {cameraRead?<><Text style={s.body}>The camera read all six grids. Panels below follow your picture from left to right, then top to bottom. Check their names before solving.</Text><Button label="Scan picture again" secondary onPress={onRetake??onClose}/></>:<>
         <Text style={s.body}>Choose a picture showing all six faces in separate, evenly spaced panels. We’ll read the colors on your device.</Text>
         <View style={s.section}><Text style={s.label}>PICTURE LAYOUT</Text><View style={s.row}>
           <Button label="3 across · 2 rows" secondary={layout!==3} disabled={busy||picking} onPress={()=>changeLayout(3)}/>
           <Button label="2 across · 3 rows" secondary={layout!==2} disabled={busy||picking} onPress={()=>changeLayout(2)}/>
         </View><Text style={s.note}>Panels are read left to right, then top to bottom. A single view of a cube cannot show all six faces.</Text></View>
         <Button label={asset?'Choose another picture':'Choose cube picture'} onPress={()=>void choose()} disabled={busy||picking}/>
+        </>}
         {asset&&<View style={s.preview}><Image source={{uri:asset.uri}} accessibilityLabel="Selected six-face cube picture" style={{width:'100%',aspectRatio:asset.width/asset.height}} resizeMode="contain"/>{Array.from({length:6},(_,i)=><View key={i} style={[s.number,{left:`${(i%layout)*100/layout}%`,top:`${Math.floor(i/layout)*100/(6/layout)}%`}]}><Text style={s.numberText}>{i+1}</Text></View>)}</View>}
         {read&&<>
           <Text style={s.label}>CHECK THE SIX FACES</Text>
@@ -94,7 +96,7 @@ export function PhotoImport({onClose,onGuide,onScan}:{onClose:()=>void;onGuide:(
           <Text style={s.label}>{move?`TURN ${step+1} OF ${solution.moves.length}`:solution.moves.length?'INSTRUCTIONS COMPLETE':'PICTURE ALREADY SOLVED'}</Text>
           {move&&face?<><Text style={s.arrow}>{move.endsWith("'")?'↺':'↻'}</Text><View style={s.center}><View style={[s.swatch,{backgroundColor:COLOR_HEX[solution.state.centers[face]]}]}/><Text style={s.faceName}>{FACE_NAMES[face]} face</Text></View><Text style={s.turnText}>Turn {move.endsWith("'")?'counterclockwise':'clockwise'} one quarter turn.</Text><Text style={s.note}>Direction is as seen looking straight at that face. Turn only that layer.</Text></>:<Text style={s.turnText}>{solution.moves.length?'You’ve reached the end of the steps. Use the camera to check your physical cube.':'The six faces in this picture are solved.'}</Text>}
         </View>
-        <Text style={s.note}>Photo steps are manual. The app cannot see or confirm your turns until you switch to the camera.</Text>
+        <Text style={s.note}>Picture steps are manual. Bring your physical cube into the camera for turn verification.</Text>
         <View style={s.row}><Button label="Previous" secondary disabled={step===0} onPress={()=>setStep(n=>n-1)}/>{move&&<Button label="I made this turn →" onPress={()=>setStep(n=>n+1)}/>}</View>
         {move?<Button label="Continue with camera" secondary onPress={guide}/>:<Button label="Check my cube with camera" onPress={onScan}/>}
         <View style={s.section}><Text style={s.label}>ALL TURNS · OPTIONAL NOTATION</Text><Text selectable style={s.notation}>{solution.moves.join('  ')||'No turns needed.'}</Text></View>

@@ -142,6 +142,10 @@ std::string detect(const uint8_t* rgba,int width,int height,int stride) {
         for(int k=0;k<4;k++){
           P a=predicted[(k+1)%4]-predicted[k],b=cell->q[(k+rotation+1)%4]-cell->q[(k+rotation)%4];
           const double length=cv::norm(a)*cv::norm(b);if(length<1)return;
+          // Separate diagram panels can accidentally form a sparse 3x3 lattice.
+          // A grid cell must fit the sticker it represents, not span two rows.
+          const double ratio=cv::norm(a)/cv::norm(b);
+          if(ratio<.70||ratio>1.80){agreement=-4;break;}
           agreement+=a.dot(b)/length;
         }
         best=std::max(best,agreement/4);
@@ -217,7 +221,9 @@ std::string detect(const uint8_t* rgba,int width,int height,int stride) {
       double edge=0;for(int i=0;i<4;i++)edge=std::max(edge,cv::norm(face.q[(i+1)%4]-face.q[i]));
       return cv::norm(center(face.q)-center(other.q))<edge*.3;
     }))continue;
-    distinct.push_back(face);if(distinct.size()==3)break;
+    // A live camera can see a printed/displayed six-face diagram as well as a
+    // physical cube. Keep its spatially distinct panels, including equal centers.
+    distinct.push_back(face);if(distinct.size()==6)break;
   }
   found=std::move(distinct);
   std::ostringstream out;out.precision(7);

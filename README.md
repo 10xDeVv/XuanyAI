@@ -6,9 +6,19 @@ A local-first camera prototype for a standard six-color 3×3 cube. TypeScript, E
 
 **Dax / iPhone signing:** start with [the collaborator setup guide](docs/DAX-SETUP.md) to clone this repository, accept Expo access, register phones, and create the first signed iPhone build using your own Apple Developer account.
 
-## Solve from a picture
+## Point the camera at a picture
 
-Choose **Solve from a picture** on the start screen. Import one image with six separate, evenly spaced face panels: three columns by two rows, or two columns by three rows. Each panel must show a complete 3×3 grid. Processing stays on the device, using the same OpenCV detector as the camera.
+Choose **Point camera at a picture**, then aim the back camera at a printed or screen-displayed six-face diagram. Keep all six grids visible, with the text upright, and pause. Six steady grids in three columns by two rows (or two columns by three rows) are captured automatically. The ordinary cube scan also recognizes a complete six-panel diagram automatically. No file selection or upload is required.
+
+Detection uses the whole camera frame and retains separate panels even when their centers have the same color. The preview shows the whole processed frame, with aligned outlines. Capture requires four matching, clear observations over at least 450 ms; blur, missing panels, changes, movement, or a frame gap restart this pause. This is a prototype for reasonably straight-on diagrams with moderate tilt; glare, small panels, and extreme perspective can prevent recognition.
+
+After capture, check the displayed colors, face names, and rotations. The initial names are Up, Front, Right, Left, Down, Back in reading order. Text labels are not read automatically. Invalid diagrams are recognized but cannot be solved: for example, two white centers are not a valid six-color cube. A picture supplies a starting state; physical turn verification requires bringing the real cube into view.
+
+The C++ detector changed, so native users need a new development build. Physical screen/paper camera tests on Android and iPhone remain outstanding; see the validation record.
+
+## Choose a saved picture
+
+The secondary **Or choose a saved picture** option imports one image with six separate, evenly spaced face panels: three columns by two rows, or two columns by three rows. Each panel must show a complete 3×3 grid. Processing stays on the device, using the same OpenCV detector as the camera.
 
 Review the detected colors, face names, and rotations before continuing. The initial panel order is Up, Front, Right, Left, Down, Back (left to right, then top to bottom); labels can be changed. Text labels are not recognized automatically. Face orientation follows the outside-view URFDLB convention: Up is above Front/Right/Left/Back, Back is above Up, and Front is above Down. A single perspective photo cannot supply hidden faces; arbitrary collages and unfolded cross-shaped nets are not supported yet.
 

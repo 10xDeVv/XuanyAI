@@ -27,7 +27,7 @@ export function toPreview(p:Point,t:PreviewTransform):Point {
   else if(t.rotation===180) [x,y]=[w-x,h-y];
   else if(t.rotation===270) { [x,y]=[y,w-x]; [w,h]=[h,w]; }
   if(t.mirrored) x=w-x;
-  const scale=Math.max(t.previewWidth/w,t.previewHeight/h);
+  const scale=(t.fit==='contain'?Math.min:Math.max)(t.previewWidth/w,t.previewHeight/h);
   return {x:x*scale+(t.previewWidth-w*scale)/2,y:y*scale+(t.previewHeight-h*scale)/2};
 }
 export function turnArrow(q:Quad,counterclockwise:boolean):{path:string;head:string} {

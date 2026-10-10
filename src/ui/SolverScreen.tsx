@@ -30,11 +30,11 @@ export default function SolverScreen(){
   const [photo,setPhoto]=useState(false);
   useEffect(()=>()=>sessionRef.current?.dispose(),[]);
   useEffect(()=>{if(!view.confirmedAt)return;setConfirmed(true);const timeout=setTimeout(()=>setConfirmed(false),850);return()=>clearTimeout(timeout);},[view.confirmedAt]);
-  const start=()=>{
+  const start=(mode:'auto'|'diagram'='auto')=>{
     try{
       let next=sessionRef.current;
       if(!next||next.getSnapshot().stage==='error'){next?.dispose();next=new Session(createSolver());sessionRef.current=next;setSession(next);}
-      setLocalError(null);setPaused(false);setStatus('Opening camera');next.start();scroll.current?.scrollTo({y:0,animated:false});
+      setLocalError(null);setPaused(false);setPhoto(false);if(mode==='diagram')setFacing('back');setStatus('Opening camera');next.start(mode);scroll.current?.scrollTo({y:0,animated:false});
     }
     catch(e){setLocalError(e instanceof Error?e.message:'The camera could not start.');}
   };
@@ -45,14 +45,16 @@ export default function SolverScreen(){
   };
   const onError=useCallback((message:string)=>{sessionRef.current?.cameraError(message);setStatus('Camera paused');},[]);
   const suspend=useCallback(()=>sessionRef.current?.suspend(),[]);
+  const closePicture=()=>{sessionRef.current?.dispose();sessionRef.current=null;setSession(null);setPhoto(false);setStatus('Camera is off');};
   const stage=view.stage,setup=stage==='setup',error=stage==='error'||!!localError,solved=stage==='solved';
-  const active=!!session&&!setup&&!solved&&!error&&!paused;
+  const active=!!session&&!setup&&!solved&&!error&&!paused&&stage!=='picture'&&!photo;
+  const diagram=view.diagramCount!==undefined;
   const compact=!wide&&!setup&&!solved;
   const target=view.nextMove?.[0] as Face|undefined;
   const targetVisible=target&&view.poses.some(p=>p.face===target);
   const hidden=stage==='guiding'&&target&&!targetVisible;
   const message=localError??(hidden?'Rotate the whole cube to show this center.':view.message);
-  const phase=error?'Let’s try that again':setup?'Ready when you are':solved?'Every side. Solved.':stage==='scanning'?'Getting to know your cube':stage==='planning'?'A little thinking…':stage==='recovering'?'Let’s get a clearer view':stage==='verifying'?'The finishing touch':hidden?'Bring the next face into view':'One turn closer.';
+  const phase=error?'Let’s try that again':setup?'Ready when you are':solved?'Every side. Solved.':stage==='scanning'?(diagram?'Point at the whole picture.':'Getting to know your cube'):stage==='planning'?'A little thinking…':stage==='recovering'?'Let’s get a clearer view':stage==='verifying'?'The finishing touch':hidden?'Bring the next face into view':'One turn closer.';
   const minutes=Math.floor(view.elapsedMs/60000),seconds=Math.floor(view.elapsedMs/1000)%60;
   return <SafeAreaView style={s.page}>
     <ScrollView ref={scroll} contentContainerStyle={[s.shell,wide&&{paddingHorizontal:56},compact&&{paddingHorizontal:14}]}>
@@ -69,13 +71,13 @@ export default function SolverScreen(){
           <View style={[s.viewer,{height:wide?490:compact?Math.max(230,Math.min(380,height*.42)):320}]}>
             {active&&<CameraSurface active={active} facing={facing} saveFrameRequest={saveFrameRequest} onObservation={observe} onError={onError} onStatus={setStatus} onSuspend={suspend}/>}
             {(!active||setup)&&<View style={s.illustration}><View style={s.orbit}/><View style={s.orbitInner}/><View style={{width:285,height:300}}><CubeArt/></View></View>}
-            {active&&!paused&&<GuidanceOverlay observation={view.observation} poses={view.poses} move={view.nextMove}/>}
+            {active&&!paused&&<GuidanceOverlay observation={view.observation} poses={view.poses} move={view.nextMove} panels={diagram}/>}
             <View style={s.viewerTop}><View style={s.liveChip}><View style={[s.dot,{backgroundColor:active?lime:'#7A887E'}]}/><Text style={s.liveText}>{active?'LIVE GUIDE':solved?'NICE WORK':'CAMERA PREVIEW'}</Text></View><Text style={s.viewerTag}>3 × 3</Text></View>
-            {active&&stage==='scanning'&&<View pointerEvents="none" style={s.reticle}><View style={s.reticleCorner}/><View style={[s.reticleCorner,{right:0,transform:[{rotate:'90deg'}]}]}/><View style={[s.reticleCorner,{bottom:0,transform:[{rotate:'-90deg'}]}]}/><View style={[s.reticleCorner,{right:0,bottom:0,transform:[{rotate:'180deg'}]}]}/></View>}
+            {active&&stage==='scanning'&&!diagram&&<View pointerEvents="none" style={s.reticle}><View style={s.reticleCorner}/><View style={[s.reticleCorner,{right:0,transform:[{rotate:'90deg'}]}]}/><View style={[s.reticleCorner,{bottom:0,transform:[{rotate:'-90deg'}]}]}/><View style={[s.reticleCorner,{right:0,bottom:0,transform:[{rotate:'180deg'}]}]}/></View>}
             {confirmed&&active&&<View style={s.confirmation}><Text style={s.confirmText}>✓  Got it</Text></View>}
             <View pointerEvents="none" style={s.viewerBottom}>
               <Text style={s.viewerCaption}>{setup?'A little guidance goes a long way.':paused?'Take your time. We’ll be right here.':solved?'Look what you just did.':stage==='planning'?'Finding a way from here.':status}</Text>
-              <Text style={s.viewerSub}>{setup?'Your real cube. Your next turn.':active?'Keep the cube in view · Pause between turns':'POINT. SCAN. SOLVE.'}</Text>
+              <Text style={s.viewerSub}>{setup?'Your real cube. Your next turn.':active?(diagram?'Paper or screen · All six grids in view':'Keep the cube in view · Pause between turns'):'POINT. SCAN. SOLVE.'}</Text>
             </View>
           </View>
           <View style={s.viewerToolbar}><View style={s.privacy}><Text style={{fontSize:14,color:muted}}>◈</Text><Text style={s.toolbarLabel}>{active?'Unmirrored view':'Camera starts only when you’re ready'}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Switch camera" style={s.switchButton} onPress={()=>{suspend();setFacing(f=>f==='front'?'back':'front');}}><Text style={s.switchText}>↻  {facing==='front'?'Front':'Back'} camera</Text></Pressable></View>
@@ -85,14 +87,15 @@ export default function SolverScreen(){
           <Text accessibilityRole="header" style={[s.panelTitle,compact&&{fontSize:22,lineHeight:27,marginTop:0}]}>{paused?'Paused. Take your time.':phase}</Text>
           <Text accessibilityLiveRegion="polite" style={[s.panelBody,compact&&{marginTop:6}]}>{error?message:setup?'Prop up your phone, grab your cube, and let’s untangle it together. We’ll show you exactly what to turn.':paused?'Resume when you’re ready. We’ll take a fresh look at your cube.':message}</Text>
           {hidden&&view.cube&&target&&<View style={s.reveal}><View style={[s.centerSwatch,{backgroundColor:COLOR_HEX[view.cube.centers[target]]}]}/><View><Text style={s.revealTitle}>Show this center</Text><Text style={s.revealBody}>Move the whole cube, keeping layers still.</Text></View></View>}
-          {(setup||stage==='scanning')&&<View style={[s.scanProgress,compact&&{marginTop:12,paddingTop:12}]}><View style={s.progressHeader}><Text style={s.progressLabel}>FACES CAPTURED</Text><Text style={s.progressCount}>{view.captured.length}<Text style={{color:'#A1A99D'}}> / 6</Text></Text></View><View style={[s.faces,compact&&{marginTop:10}]}>{COLORS.map(c=><View key={c} accessibilityLabel={`${c} face ${view.captured.includes(c)?'captured':'not captured'}`} style={[s.faceDot,compact&&{width:25,height:25,borderRadius:6},{backgroundColor:COLOR_HEX[c],opacity:view.captured.includes(c)?1:.28}]}>{view.captured.includes(c)&&<Text style={s.faceCheck}>✓</Text>}</View>)}</View>{!compact&&<Text style={s.scanHint}>{setup?'We’ll pick these up as you rotate.':'Any order works. No need to tap.'}</Text>}</View>}
+          {(setup||stage==='scanning')&&<View style={[s.scanProgress,compact&&{marginTop:12,paddingTop:12}]}><View style={s.progressHeader}><Text style={s.progressLabel}>{diagram?'CLEAR PANELS IN VIEW':'FACES CAPTURED'}</Text><Text style={s.progressCount}>{diagram?view.diagramCount:view.captured.length}<Text style={{color:'#A1A99D'}}> / 6</Text></Text></View>{diagram?<Text style={s.scanHint}>Hold the picture upright. Capture happens automatically after a short pause.</Text>:<><View style={[s.faces,compact&&{marginTop:10}]}>{COLORS.map(c=><View key={c} accessibilityLabel={`${c} face ${view.captured.includes(c)?'captured':'not captured'}`} style={[s.faceDot,compact&&{width:25,height:25,borderRadius:6},{backgroundColor:COLOR_HEX[c],opacity:view.captured.includes(c)?1:.28}]}>{view.captured.includes(c)&&<Text style={s.faceCheck}>✓</Text>}</View>)}</View>{!compact&&<Text style={s.scanHint}>{setup?'We’ll pick these up as you rotate.':'Any order works. No need to tap.'}</Text>}</>}</View>}
           {stage==='planning'&&<View style={s.thinking}><ActivityIndicator color={ink}/><Text style={s.scanHint}>Working on your device</Text></View>}
           {!compact&&!setup&&!['scanning','error','planning'].includes(stage)&&<View style={s.stats}><View><Text style={s.statValue}>{solved?`${minutes}:${String(seconds).padStart(2,'0')}`:String(view.movesDone).padStart(2,'0')}</Text><Text style={s.statLabel}>{solved?'YOUR SOLVE TIME':'TURNS MADE'}</Text></View><View style={s.statDivider}/><View><Text style={s.statValue}>{solved?view.movesDone:view.movesRemaining}</Text><Text style={s.statLabel}>{solved?'TURNS TAKEN':'TURNS TO GO'}</Text></View></View>}
           <View style={{flex:1,minHeight:16}}/>
-          {(setup||error||solved)?<Action label={error?'Try again':solved?'Solve another cube':'Let’s solve your cube'} onPress={start}/>:<Action label={paused?'Resume camera':'Pause for a moment'} secondary onPress={()=>{suspend();setPaused(p=>!p);}}/>}
+          {(setup||error||solved)?<Action label={error?'Try again':solved?'Solve another cube':'Let’s solve your cube'} onPress={()=>start()}/>:<Action label={paused?'Resume camera':'Pause for a moment'} secondary onPress={()=>{suspend();setPaused(p=>!p);}}/>}
           {!setup&&!error&&!solved&&<Pressable accessibilityRole="button" onPress={()=>session?.rescan()} style={s.rescan}><Text style={s.rescanText}>Start a fresh scan</Text></Pressable>}
           {setup&&<Text style={s.permissionNote}>We’ll ask for camera access. No account needed.</Text>}
-          {(setup||error||solved)&&<View style={{marginTop:14}}><Action label="Solve from a picture" secondary onPress={()=>setPhoto(true)}/></View>}
+          {(setup||error||solved||stage==='scanning')&&<View style={{marginTop:14}}><Action label={diagram?'Scan a physical cube':'Point camera at a picture'} secondary onPress={()=>start(diagram?'auto':'diagram')}/></View>}
+          {(setup||error||solved)&&<Pressable accessibilityRole="button" style={s.rescan} onPress={()=>setPhoto(true)}><Text style={s.rescanText}>Or choose a saved picture</Text></Pressable>}
           {solved&&<Text style={s.permissionNote}>{view.corrections?`${view.corrections} detour${view.corrections===1?'':'s'}. Still got there.`:'One cube. A very good feeling.'}</Text>}
         </View>
       </View>
@@ -105,6 +108,7 @@ export default function SolverScreen(){
     </ScrollView>
     <Modal visible={help} transparent animationType="fade" onRequestClose={()=>setHelp(false)}><View style={s.modalShade}><ScrollView style={{width:'100%',maxWidth:470,maxHeight:'95%',backgroundColor:'#FCFDF8',borderRadius:22}} contentContainerStyle={s.modal}><Text style={s.panelTitle}>Set yourself up for a solve.</Text><Text style={s.panelBody}>1. Prop up your phone with the screen facing you. The front camera gives you both hands back.{ '\n\n'}2. Use a regular six-color 3×3 in bright, even light. Keep fingers near the edges.{ '\n\n'}3. Start with one complete face in view and pause until it is captured. Then turn the whole cube a little, pause, and show neighboring faces together. Keep the layers still.{ '\n\n'}4. Follow one arrow, then pause. If the view gets unclear, tilt the cube so we can catch up.{ '\n\n'}Camera images are processed on your device and aren’t uploaded.</Text>{Platform.OS==='web'&&active&&<View style={{gap:10}}><Text style={s.panelBody}>Scan stuck at zero? Try the back camera in even light. You can save a camera photo to help diagnose it. The photo stays on your device; nothing is uploaded.</Text><Action label="Save a camera photo" secondary onPress={()=>{setSaveFrameRequest(n=>n+1);setHelp(false);}}/></View>}<Action label="Got it" secondary onPress={()=>setHelp(false)}/></ScrollView></View></Modal>
     {photo&&<PhotoImport onClose={()=>setPhoto(false)} onGuide={guidePhoto} onScan={()=>{setPhoto(false);start();}}/>}
+    {stage==='picture'&&view.picture&&<PhotoImport cameraRead={view.picture} onClose={closePicture} onRetake={()=>start('diagram')} onGuide={guidePhoto} onScan={()=>start()}/>}
   </SafeAreaView>;
 }
 

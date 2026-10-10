@@ -1,6 +1,6 @@
 # Prototype validation record
 
-Updated October 9, 2026 (America/Toronto). **Physical acceptance remains incomplete.** No Android/iPhone models or OS versions have been confirmed and no physical cube recording set has been collected. The requested 9/10 capture and solve rates, one-second p95 turn confirmation, and zero false confirmations are unmeasured.
+Updated October 10, 2026 (America/Toronto). **Physical acceptance remains incomplete.** No Android/iPhone models or OS versions have been confirmed and no physical cube recording set has been collected. The requested 9/10 capture and solve rates, one-second p95 turn confirmation, and zero false confirmations are unmeasured.
 
 ## Checks completed
 
@@ -8,7 +8,7 @@ Updated October 9, 2026 (America/Toronto). **Physical acceptance remains incompl
 | --- | --- | --- |
 | TypeScript | Pass | `tsc --noEmit`, strict project settings |
 | Expo configuration/dependencies | 21/21 pass | `artifacts/build-logs/expo-doctor.log` |
-| Automated tests | 27/27 pass | Vitest; includes rounded-sticker capture, covered-grid rejection, labeled picture assembly and both six-panel layouts through the compiled production worker |
+| Automated tests | 36/36 pass | Vitest; includes rounded-sticker capture, covered-grid rejection, labeled picture assembly, live diagram settling and both six-panel layouts through production camera frame messages with compiled WASM |
 | Cube model and solver | Pass | All 18 legal turns compared with cubejs, inverse/invariant tests, 20 randomized solutions applied and verified |
 | Capture and tracking | Pass on synthetic observations | Arbitrary views, adjacency/orientation assembly, invalid state reacquisition, layer-change invalidation, wrong turns, ambiguity, stale results, and fresh six-face completion. Completion rejects a hidden last-face turn and discards earlier checks after blur or a frame gap. |
 | Compiled detector integration | Pass on synthetic pixels | Production C++/OpenCV WASM detects all three faces in four differently oriented views, reconstructs a known scramble, and identifies correct and alternative settled turns |
@@ -30,6 +30,18 @@ Live worker responses had `Cache-Control: public, max-age=3600`. Worker, detecto
 
 Independent exploratory photos from [rubiks-cube-tracker](https://github.com/dwalton76/rubiks-cube-tracker/tree/master/test-data/3x3x3-random-01) and the [Rubick-s-Cube-Dataset sample montage](https://github.com/eyeeco/Rubick-s-Cube-Dataset) still expose color/lighting failures. In particular, the overexposed R photograph remains rejected. These images were used locally and are not bundled. Do not claim that the user's iPhone failure is fixed until their actual camera trial succeeds.
 
+## Live camera pointed at pictures
+
+The detector retains up to six spatially distinct grids from one live frame. A new diagram capture path orders coplanar panels in 3×2 or 2×3 arrangements and requires four clear, identical observations over at least 450 ms. Spatial stability, all 54 colors, frame continuity, and panel geometry must agree. Separate-panel lattices that skip sticker rows are rejected using cell-to-sticker size checks. Missing/blurred/changed/moving observations reset the pending capture.
+
+The start screen's **Point camera at a picture** action selects the back camera; complete diagrams are also recognized during ordinary cube scanning. Capture opens review directly, without the file picker. Names and rotations require review because text labels are not read. The camera preview uses contain scaling with the same transformation for overlays. Six-panel observations cannot verify physical turns or completion.
+
+Nine new tests cover both panel arrangements with perspective, ordering independent of detector order, settling, low confidence, missing panels, blur, color changes, movement, gaps, duplicate centers, physical-cube regression, completion guards, and preview positioning. The production worker receives full 640×480 or 480×640 RGBA `frame` messages in the pixel tests; these do not use the photo-cropping path.
+
+A local browser test streamed picture pixels with `canvas.captureStream(10)` into the actual `CameraSurface.web` component, production WASM worker, Session, and review UI. No photo import adapter was used. The user's example captured all 54 colors correctly and blocked solving with the duplicate-white-center warning. Generated valid 3×2 and 2×3 pictures both captured; the 3×2 case also auto-detected through the ordinary cube start action and produced 22 verified quarter-turn instructions. Retake resumed the video flow. The review screen was visually checked at a measured 390×844 CSS viewport. Evidence: `artifacts/live-picture-captured.jpg`, `artifacts/live-picture-solution.jpg`, `artifacts/live-picture-mobile-review.jpg`. This simulated MediaStream does not test camera optics, paper/screen glare, or iOS video processing. The test harness and supplied image were kept local and are not in the published app.
+
+Real iPhone/Android camera trials against paper and screens remain required. These changes do not establish that the previously reported iPhone camera failure is resolved.
+
 ## Photo import
 
 The picture importer reads six panels in 3×2 or 2×3 layouts, then requires face-name and orientation review. Recognition runs in the production browser WASM worker or the native detector on a separate worklet runtime. Native image decoding/cropping uses asynchronous Nitro Image operations; an explicit render applies iOS image orientation before cropping. Expo ImagePicker supplies the system selection UI ([official API documentation](https://docs.expo.dev/versions/latest/sdk/imagepicker/)).
@@ -47,7 +59,7 @@ The picture importer reads six panels in 3×2 or 2×3 layouts, then requires fac
 
 - HTTPS preview: https://point-scan-solve-10xdevv--prototype.expo.app
 - Immutable photo-import deployment: https://point-scan-solve-10xdevv--w3m8o1jwzl.expo.app (source commit `fbb0a0d`).
-- Photo-import Android development build: https://expo.dev/accounts/xuanyai/projects/point-scan-solve/builds/7deadbec-56ed-4150-ac1d-5cd52c21c758 (submitted; native compilation in progress when this entry was written).
+- Photo-import Android development build: https://expo.dev/accounts/xuanyai/projects/point-scan-solve/builds/7deadbec-56ed-4150-ac1d-5cd52c21c758 (**finished successfully**; predates six-panel live camera detection).
 - Expo project: https://expo.dev/accounts/xuanyai/projects/point-scan-solve
 - Initial Android development build **compiled successfully**, including the C++ detector and all four CPU architectures: https://expo.dev/accounts/xuanyai/projects/point-scan-solve/builds/48ac67d4-71b9-4f04-890f-052686f2d2ed . It predates the color-region detector correction and is not the final acceptance binary.
 - Android development build **compiled successfully**: https://expo.dev/accounts/xuanyai/projects/point-scan-solve/builds/b2c66005-80ef-4459-a15a-d2c983828a7e . It includes the earlier color-region correction but predates the latest sticker-center lattice patch; a new native build is needed to test that C++ change. Development builds load the current JavaScript from the project's Metro server; physical camera behavior remains untested.

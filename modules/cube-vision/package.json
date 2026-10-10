@@ -1,0 +1,11 @@
+{
+  "name": "@point-scan-solve/cube-vision",
+  "version": "0.1.0",
+  "description": "Shared OpenCV detector for Point. Scan. Solve.",
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "license": "UNLICENSED",
+  "author": "XuanyAI",
+  "homepage": "https://example.invalid/point-scan-solve",
+  "peerDependencies": { "react-native": "*", "react-native-nitro-modules": "*" }
+}

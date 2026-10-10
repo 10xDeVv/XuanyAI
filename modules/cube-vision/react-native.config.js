@@ -1,0 +1,1 @@
+module.exports = {dependency:{platforms:{android:{sourceDir:'./android',packageImportPath:'import com.margelo.nitro.cubevision.CubeVisionPackage;',packageInstance:'new CubeVisionPackage()'},ios:{podspecPath:'./CubeVision.podspec'}}}};

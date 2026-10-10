@@ -1,0 +1,23 @@
+apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.android'
+apply from: '../nitrogen/generated/android/CubeVision+autolinking.gradle'
+
+android {
+  namespace 'com.margelo.nitro.cubevision'
+  compileSdk rootProject.ext.compileSdkVersion
+  ndkVersion rootProject.ext.ndkVersion
+  defaultConfig {
+    minSdk rootProject.ext.minSdkVersion
+    targetSdk rootProject.ext.targetSdkVersion
+    externalNativeBuild { cmake { arguments '-DANDROID_STL=c++_shared', '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'; cppFlags '-std=c++20 -frtti -fexceptions' } }
+  }
+  externalNativeBuild { cmake { path 'CMakeLists.txt' } }
+  buildFeatures { prefab true }
+  sourceSets { main { jniLibs.srcDirs = ['../opencv/android/sdk/native/libs'] } }
+  packagingOptions { jniLibs { excludes += ['**/libc++_shared.so', '**/libfbjni.so', '**/libjsi.so', '**/libreactnative.so'] } }
+}
+repositories { google(); mavenCentral() }
+dependencies {
+  implementation 'com.facebook.react:react-android'
+  implementation project(':react-native-nitro-modules')
+}

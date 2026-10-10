@@ -1,0 +1,8 @@
+{
+  "$schema": "https://nitro.margelo.com/nitro.schema.json",
+  "cxxNamespace": ["cubevision"],
+  "ios": { "iosModuleName": "CubeVision" },
+  "android": { "androidNamespace": ["cubevision"], "androidCxxLibName": "CubeVision" },
+  "autolinking": { "CubeVision": { "ios": { "language": "c++", "implementationClassName": "HybridCubeVision" }, "android": { "language": "c++", "implementationClassName": "HybridCubeVision" } } },
+  "ignorePaths": ["**/node_modules"]
+}

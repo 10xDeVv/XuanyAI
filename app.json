@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "Point Scan Solve",
+    "slug": "point-scan-solve",
+    "scheme": "pointscansolve",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "com.xuanyai.pointscansolve",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Use your camera to scan your cube and guide each turn. Images stay on this device.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.xuanyai.pointscansolve",
+      "permissions": [
+        "android.permission.CAMERA"
+      ],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "name": "Point. Scan. Solve.",
+      "themeColor": "#101513"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-dev-client"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2937eb1d-5969-4010-bb76-9cf8ded821fe"
+      }
+    },
+    "owner": "10xdevv"
+  }
+}

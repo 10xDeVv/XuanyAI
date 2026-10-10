@@ -1,0 +1,106 @@
+# Point. Scan. Solve.
+
+A local-first camera prototype for a standard six-color 3×3 cube. TypeScript, Expo Router, React Native Web, VisionCamera 5, and a shared C++ OpenCV detector. There is no backend, account flow, analytics, or image upload.
+
+**Status:** implementation and automated checks are available; physical camera acceptance is not complete. Read [the validation record](docs/VALIDATION.md) before treating recognition reliability as established. Synthetic detections and simulated turn sequences do not establish phone performance.
+
+## Run the browser app
+
+Use Node 22.16 or newer supported LTS, Python 3, CMake, Ninja, and Emscripten **4.0.15**. Node 20.19.3 is too old for this Expo version.
+
+```sh
+npm ci
+npm run build:workers
+npm run build:vision
+npm run web
+```
+
+`localhost` is a browser secure context. A phone visiting a computer's plain HTTP LAN address is not: use HTTPS for phone camera access.
+
+The project-local toolchain used on this Windows machine is in `.tools` (ignored). To use its Node in PowerShell:
+
+```powershell
+$env:PATH = (Join-Path $PWD '.tools\emsdk\node\22.16.0_64bit\bin') + ';' + $env:PATH
+npm run web
+```
+
+For a clean detector toolchain, install from the official Emscripten repository:
+
+```sh
+git clone --branch 4.0.15 --depth 1 https://github.com/emscripten-core/emsdk.git .tools/emsdk
+python .tools/emsdk/emsdk.py install 4.0.15
+python .tools/emsdk/emsdk.py activate 4.0.15
+python -m pip install cmake ninja
+npm run build:vision
+```
+
+The detector build downloads OpenCV 4.13.0 sources, builds only `core` and `imgproc`, and outputs `public/vision/cube-vision.{js,wasm}`. Expect a substantial first build; subsequent builds reuse the libraries. `EMSDK` can point to an existing installation. OpenCV's source `LICENSE` applies to the generated binary; cubejs's MIT license is retained in `vendor/cubejs/LICENSE`.
+
+## HTTPS browser distribution
+
+```sh
+npm run build:web
+```
+
+Deploy the resulting **entire `dist` directory** to an HTTPS static host at the domain root. `/solver.worker.js`, `/vision.worker.js`, and `/vision/cube-vision.wasm` must be served as files, not the app's HTML fallback. WASM uses the `application/wasm` MIME type. No backend or cross-origin isolation is required. Builds fail early if the detector binary is absent.
+
+For an existing trusted development certificate:
+
+```powershell
+$env:TLS_CERT = 'C:\path\to\certificate.pem'
+$env:TLS_KEY = 'C:\path\to\private-key.pem'
+$env:HOST = '0.0.0.0' # only when testing from another device on your LAN
+npm run web:https
+```
+
+The certificate must cover the hostname and be trusted on each test device. The server defaults to loopback and port 8443; it does not install certificates or bypass browser security. Keep private keys outside the repository.
+
+## Android and iPhone development builds
+
+Expo Go cannot load this native camera module. Use a development build.
+
+```sh
+npm run build:workers
+npm run native:generate
+python scripts/prepare-native.py --platform android
+npx expo prebuild --platform android
+npx expo run:android
+```
+
+For cloud builds (the recommended iPhone route from Windows):
+
+```sh
+npx eas-cli login
+npx eas-cli build:configure
+npx eas-cli device:create       # register the physical iPhone
+npx eas-cli build --profile development --platform ios
+npx eas-cli build --profile development --platform android
+npm start
+```
+
+The EAS post-install hook regenerates the local solver bundle and Nitro bindings and retrieves the pinned official OpenCV SDK for the build platform, checking the release asset's size and SHA-256 when supplied by GitHub. Apple development signing and registered device access are required. `eas.json` also includes an Android preview APK profile and an iOS simulator profile. Cloud project creation/signing is interactive until the Expo account is connected. Do not put account credentials in source or chat.
+
+Android local builds need Java 17+, Android SDK 36 and NDK 27.1.12297006 plus several GB of available disk space. The generated `android/` and `ios/` directories are disposable Expo outputs; application configuration lives in `app.json`.
+
+## How the prototype works
+
+- **Capture:** camera frames are reduced to at most 640 pixels on their longest side. Web transfers one RGBA buffer to a worker; native uses VisionCamera's asynchronous frame runner and a Nitro C++ module. Busy frames are dropped. Front camera previews are unmirrored.
+- **Detect:** OpenCV finds quadrilateral sticker/color regions, fits a 3×3 projective lattice, samples inner squares, and returns six-color confidence, glare, sharpness, and face corners. It does not use a remote model. Classification is currently fixed HSV bands and requires real-cube calibration/testing.
+- **Assemble:** settled views are associated by center color and shared face edges. Adjacency constraints establish the center map and each face's rotation without prescribing scan order or physical white-up orientation. Color counts, piece uniqueness, edge/corner orientation, chirality, and permutation parity must pass. Conflicting counts request reacquisition; a detected layer twist invalidates the scan.
+- **Solve:** vendored cubejs 1.3.2 implements Kociemba. Initialization and search happen in a Web Worker or a dedicated native worklet runtime. Every returned solution is applied to the input state to verify it. Half turns become two separate quarter turns. Revisions and session epochs reject obsolete results.
+- **Guide:** homography projects an animated curved arrow onto the observed target face. Hidden faces request a whole-cube rotation. Tracking compares the previous state and all 18 legal face turns; only one distinguishable, settled candidate can advance. A different legal move triggers replanning. Ambiguous views hide the arrow; sustained mismatch leads to scanning.
+- **Finish:** the logical solution is followed by fresh, settled observations of all six solved faces. Camera pause, switch, or app backgrounding requires a new scan because unseen turns may have occurred.
+
+Core contracts are in `src/core/types.ts`. `CubeState` and camera orientation are separate. `src/session/Session.ts` owns the application state machine. The camera transforms and arrow geometry are in `src/core/geometry.ts`.
+
+## Check and measure
+
+```sh
+npm run typecheck
+npm test
+npm run test:vision  # requires the compiled WASM detector
+```
+
+The core suite checks cube invariants, all legal moves against cubejs, inverse round trips, randomized verified solutions, arbitrary scan views, hidden-turn ambiguity, wrong-turn replanning, stale results, background recovery, and perspective projection. The pixel fixture suite uses the **compiled production WASM detector** on synthetic front/tilted/rotated/narrow-seam images plus blank and obscured negatives. Its report is `artifacts/synthetic-detector-results.json`.
+
+Follow [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) for real recordings, expected results, device metadata, and trial scoring. The acceptance targets are goals, not measured claims. Real Android/iPhone recordings, native binary validation, and lighting/stickerless reliability remain required before calling this a working cross-platform camera product.

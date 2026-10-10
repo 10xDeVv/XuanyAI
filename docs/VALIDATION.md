@@ -125,9 +125,13 @@ The same browser MediaStream now advances `6:1 (1103 ms), 6:2 (837 ms), 6:3 (886
 
 These screenshot replays are diagnostic evidence, not continuous physical recordings or proof of the acceptance success/latency targets. New iPhone Safari/Chrome and native trials remain required, especially for motion, moiré, lighting changes, and processing speed.
 
+The final web and sequential iOS/Android Hermes exports pass. A local memory failure during the first concurrent tooling run was resolved by exporting sequentially with two Metro workers. The deployed app bundle, vision worker, detector JS/WASM, and solver worker match the tested export byte-for-byte and return HTTP 200 with the correct MIME types. Detector version: `60f617c8caf04dca`. The published home screen loads without browser console errors. Native exports do not establish native compilation or physical-camera success.
+
 ## Builds and access
 
 - HTTPS preview: https://point-scan-solve-10xdevv--prototype.expo.app
+- Immutable screen-camera recovery: https://point-scan-solve-10xdevv--ovwfd9bzcd.expo.app (detector/source change `68024e1`).
+- Screen-camera Android development build: https://expo.dev/accounts/xuanyai/projects/point-scan-solve/builds/8f3b691e-288b-4044-9117-7a8ee11b2a89 (submitted; compilation and device testing pending).
 - Immutable capture-stability correction: https://point-scan-solve-10xdevv--8owurkn8o3.expo.app (source commit `247b8a2`).
 - Immutable joined-net correction: https://point-scan-solve-10xdevv--hfh248gc94.expo.app (source commit `cbe4583`).
 - Joined-net Android development build: https://expo.dev/accounts/xuanyai/projects/point-scan-solve/builds/82046d8c-c5e1-4c56-b514-41d8fc80d7e1 (submitted; completion and runtime testing pending).

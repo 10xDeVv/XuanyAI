@@ -8,7 +8,8 @@ Pod::Spec.new do |s|
   s.license = package['license']
   s.author = package['author']
   s.platforms = { :ios => min_ios_version_supported }
-  s.source = { :git => 'https://example.invalid/point-scan-solve.git', :tag => s.version.to_s }
+  # Installed from this repository as a local pod by Expo autolinking.
+  s.source = { :git => 'https://github.com/10xDeVv/XuanyAI.git', :branch => 'main' }
   s.source_files = 'cpp/Detector.{hpp,cpp}', 'cpp/HybridCubeVision.hpp'
   s.vendored_frameworks = 'opencv/ios/opencv2.framework'
   s.frameworks = 'Accelerate', 'AVFoundation', 'CoreGraphics', 'CoreMedia', 'CoreVideo'

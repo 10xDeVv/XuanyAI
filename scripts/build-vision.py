@@ -48,6 +48,11 @@ def main():
          '-DCMAKE_C_FLAGS=-O3','-DCMAKE_CXX_FLAGS=-O3'],env=env)
     run([cmake,'--build',build,'--parallel',args.jobs],env=env)
     output=ROOT/'public'/'vision';output.mkdir(parents=True,exist_ok=True)
+    licenses=ROOT/'public'/'licenses';licenses.mkdir(exist_ok=True)
+    shutil.copy2(source/'LICENSE',licenses/'OpenCV.txt')
+    for name in ['zlib','zlib-ng']:
+        license_path=source/'3rdparty'/name/('LICENSE.md' if name=='zlib-ng' else 'LICENSE')
+        if license_path.exists():shutil.copy2(license_path,licenses/f'{name}.txt')
     run([sys.executable,em/'em++.py','-O3','-std=c++17','--bind',
          ROOT/'modules/cube-vision/cpp/Detector.cpp',ROOT/'modules/cube-vision/cpp/wasm.cpp',
          '-I'+str(source/'modules/core/include'),'-I'+str(source/'modules/imgproc/include'),'-I'+str(build),

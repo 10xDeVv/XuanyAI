@@ -11,6 +11,12 @@ artifacts/
 *.keystore
 *.p12
 *.mobileprovision
+*.p8
+*.pfx
+*.pem
+*.key
+credentials.json
+certs/
 .env*
 !.env.example
 public/vision/cube-vision.js

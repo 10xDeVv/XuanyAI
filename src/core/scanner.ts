@@ -6,6 +6,7 @@ type StoredFace={grid:FaceGrid<CubeColor>;quality:number};
 type EdgeConstraint={a:CubeColor;b:CubeColor;aEdges:number[];bEdges:number[]};
 export type ScanProgress={captured:CubeColor[];message:string;state?:CubeState;invalidated?:boolean};
 const signature=(g:readonly CubeColor[])=>[0,1,2,3].map(r=>rotateGrid(g,r).join(',')).sort()[0]!;
+const canonical=(g:FaceGrid<CubeColor>)=>[0,1,2,3].map(r=>rotateGrid(g,r)).sort((a,b)=>a.join(',').localeCompare(b.join(',')))[0]!;
 export const reliableFace=(f:ObservedFace)=>f.confidence.every(c=>c>=0.65)&&f.glare<0.22&&f.sharpness>=18;
 function permutations<T>(items:T[]):T[][] {
   if(!items.length) return [[]];
@@ -16,18 +17,22 @@ export class CubeScanner {
   private faces=new Map<CubeColor,StoredFace>();
   private pending=new Map<CubeColor,{signature:string;count:number;since:number;last:number}>();
   private edges:EdgeConstraint[]=[];
+  private pendingEdges=new Map<string,{count:number;since:number;last:number}>();
+  private reacquired=new Set<CubeColor>();
+  private assemblyKey='';
+  private assembledState:CubeState|undefined;
   private lastTimestamp=-Infinity;
   private revision=0;
-  reset() {this.faces.clear();this.pending.clear();this.edges=[];this.lastTimestamp=-Infinity;this.revision++;}
+  reset() {this.faces.clear();this.pending.clear();this.edges=[];this.pendingEdges.clear();this.reacquired.clear();this.assemblyKey='';this.assembledState=undefined;this.lastTimestamp=-Infinity;this.revision++;}
   observe(o:CubeObservation):ScanProgress {
     const result=(message:string,extra:Partial<ScanProgress>={}):ScanProgress=>({captured:[...this.faces.keys()],message,...extra});
     if(o.timestamp<=this.lastTimestamp) return result('Rotate the whole cube slowly.');
     this.lastTimestamp=o.timestamp;
-    if(o.quality==='blur') {this.pending.clear();return result('Pause for a moment so I can see the squares.');}
-    if(o.quality==='glare') {this.pending.clear();return result('Tilt the cube away from the light.');}
+    if(o.quality==='blur') {this.pending.clear();this.pendingEdges.clear();return result('Pause for a moment so I can see the squares.');}
+    if(o.quality==='glare') {this.pending.clear();this.pendingEdges.clear();return result('Tilt the cube away from the light.');}
     const visible=o.faces.filter(reliableFace);
     for(const c of this.pending.keys())if(!visible.some(f=>f.colors[4]===c))this.pending.delete(c);
-    if(!visible.length) return result('Bring the cube into view, with your fingers near its edges.');
+    if(!visible.length) {this.pendingEdges.clear();return result('Bring the cube into view, with your fingers near its edges.');}
     let invalidated=false;
     for(const face of visible) {
       const center=face.colors[4],sig=signature(face.colors);
@@ -40,35 +45,52 @@ export class CubeScanner {
         // A layer twist can alter several previously captured faces. Start a coherent capture again.
         this.reset(); this.lastTimestamp=o.timestamp; invalidated=true; break;
       }
-      if(!stored) this.faces.set(center,{grid:face.colors,quality:Math.min(...face.confidence)});
+      if(!stored) this.faces.set(center,{grid:canonical(face.colors),quality:Math.min(...face.confidence)});
     }
     if(invalidated) return result('The squares changed. Rotate the whole cube without twisting a layer.',{invalidated:true});
+    const visibleEdges=new Set<string>();
     for(let i=0;i<visible.length;i++) for(let j=i+1;j<visible.length;j++) {
-      const a=visible[i]!,b=visible[j]!,ca=a.colors[4],cb=b.colors[4];
+      const [a,b]=[visible[i]!,visible[j]!].sort((a,b)=>a.colors[4].localeCompare(b.colors[4])) as [ObservedFace,ObservedFace];
+      const ca=a.colors[4],cb=b.colors[4];
       const sa=this.faces.get(ca),sb=this.faces.get(cb),edges=sharedEdge(a.quad,b.quad);
-      if(ca===cb || !sa || !sb || !edges) continue;
-      const aEdges=rotationsMatching(a.colors,sa.grid).map(r=>(edges[0]+r)%4);
-      const bEdges=rotationsMatching(b.colors,sb.grid).map(r=>(edges[1]+r)%4);
+      if(ca===cb || !edges) continue;
+      const aEdges=rotationsMatching(a.colors,sa?.grid??canonical(a.colors)).map(r=>(edges[0]+r)%4).sort();
+      const bEdges=rotationsMatching(b.colors,sb?.grid??canonical(b.colors)).map(r=>(edges[1]+r)%4).sort();
       if(!aEdges.length || !bEdges.length) continue;
       const c={a:ca,b:cb,aEdges,bEdges};
-      if(!this.edges.some(e=>JSON.stringify(e)===JSON.stringify(c))) this.edges.push(c);
+      const key=JSON.stringify(c),old=this.pendingEdges.get(key);visibleEdges.add(key);
+      const p=old&&o.timestamp-old.last<800?{...old,count:old.count+1,last:o.timestamp}:{count:1,since:o.timestamp,last:o.timestamp};
+      this.pendingEdges.set(key,p);
+      if(sa&&sb&&p.count>=3&&o.timestamp-p.since>=220&&!this.edges.some(e=>JSON.stringify(e)===key))this.edges.push(c);
     }
+    for(const key of this.pendingEdges.keys())if(!visibleEdges.has(key))this.pendingEdges.delete(key);
     if(this.faces.size<6) return result(`${this.faces.size} of 6 faces captured. Keep rotating the whole cube.`);
     const counts=new Map<CubeColor,number>();
     for(const f of this.faces.values())for(const c of f.grid)counts.set(c,(counts.get(c)??0)+1);
     if([...counts.values()].some(n=>n!==9)||counts.size!==6){
       // A conflicting color count cannot be fixed by rotating the assembled state.
       // Reacquire the least confident face containing an overrepresented color.
-      const suspect=[...this.faces].filter(([,f])=>f.grid.some(c=>(counts.get(c)??0)>9)).sort((a,b)=>a[1].quality-b[1].quality)[0]?.[0];
-      if(suspect){this.faces.delete(suspect);this.pending.delete(suspect);this.edges=this.edges.filter(e=>e.a!==suspect&&e.b!==suspect);return result(`Show the ${suspect} center again. One view didn’t agree.`);}
+      return result(this.reacquire([...this.faces].filter(([,f])=>f.grid.some(c=>(counts.get(c)??0)>9)).map(([c])=>c)));
     }
+    const key=JSON.stringify([[...this.faces],this.edges]);
+    if(key===this.assemblyKey)return this.assembledState?result('Cube captured.',{state:this.assembledState}):result('Tilt the cube to show two neighboring faces together.');
+    this.assemblyKey=key;
     const assembled=this.assemble();
-    if(assembled) return result('Cube captured.',{state:assembled});
+    this.assembledState=assembled.state;
+    if(assembled.state) return result('Cube captured.',{state:assembled.state});
+    if(assembled.invalid)return result(this.reacquire([...this.faces.keys()]));
     return result('Tilt the cube to show two neighboring faces together.');
   }
-  private assemble():CubeState|null {
+  private reacquire(candidates:CubeColor[]):string {
+    const suspect=candidates.filter(c=>!this.reacquired.has(c)).sort((a,b)=>this.faces.get(a)!.quality-this.faces.get(b)!.quality)[0];
+    if(!suspect){this.reset();return 'The views still disagree. Let’s scan again in even light.';}
+    this.reacquired.add(suspect);this.faces.delete(suspect);this.pending.delete(suspect);this.pendingEdges.clear();
+    this.edges=this.edges.filter(e=>e.a!==suspect&&e.b!==suspect);this.assemblyKey='';this.assembledState=undefined;
+    return `Show the ${suspect} center again. One view didn’t agree.`;
+  }
+  private assemble():{state?:CubeState;invalid?:boolean} {
     const first=this.edges[0];
-    if(!first) return null;
+    if(!first) return {};
     const remaining=[...this.faces.keys()].filter(c=>c!==first.a&&c!==first.b);
     const states=new Map<string,CubeState>();
     // The first observed adjacent centers define an internal U/F reference. No physical orientation is prescribed.
@@ -86,14 +108,15 @@ export class CubeScanner {
       }
       if(!valid) continue;
       const build=(i:number,facelets:string)=>{
+        if(states.size>1)return;
         if(i===6) { if(validateCube(facelets).valid) states.set(facelets,{facelets,centers,revision:this.revision}); return; }
         const f=FACES[i]!,grid=this.faces.get(centers[f])!.grid;
         const variants=new Set(allowed[f].map(r=>rotateGrid(grid,r).map(c=>inverse[c]).join('')));
         for(const variant of variants) build(i+1,facelets+variant);
       };
       build(0,'');
-      if(states.size>1) return null;
+      if(states.size>1) return {};
     }
-    return states.size===1?[...states.values()][0]!:null;
+    return states.size===1?{state:[...states.values()][0]!}:{invalid:true};
   }
 }

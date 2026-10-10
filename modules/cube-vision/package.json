@@ -6,6 +6,6 @@
   "react-native": "src/index.ts",
   "license": "UNLICENSED",
   "author": "XuanyAI",
-  "homepage": "https://example.invalid/point-scan-solve",
+  "homepage": "https://github.com/10xDeVv/XuanyAI",
   "peerDependencies": { "react-native": "*", "react-native-nitro-modules": "*" }
 }

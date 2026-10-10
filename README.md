@@ -4,6 +4,8 @@ A local-first camera prototype for a standard six-color 3×3 cube. TypeScript, E
 
 **Status:** implementation and automated checks are available; physical camera acceptance is not complete. Read [the validation record](docs/VALIDATION.md) before treating recognition reliability as established. Synthetic detections and simulated turn sequences do not establish phone performance.
 
+**Dax / iPhone signing:** start with [the collaborator setup guide](docs/DAX-SETUP.md) to clone this repository, accept Expo access, register phones, and create the first signed iPhone build using your own Apple Developer account.
+
 ## Run the browser app
 
 Use Node 22.16 or newer supported LTS, Python 3, CMake, Ninja, and Emscripten **4.0.15**. Node 20.19.3 is too old for this Expo version.
@@ -38,11 +40,15 @@ The detector build downloads OpenCV 4.13.0 sources, builds only `core` and `imgp
 
 ## HTTPS browser distribution
 
+Current test deployment: **https://point-scan-solve-10xdevv--prototype.expo.app**. This is a prototype preview; see the validation record for measured results and outstanding phone trials.
+
 ```sh
 npm run build:web
 ```
 
 Deploy the resulting **entire `dist` directory** to an HTTPS static host at the domain root. `/solver.worker.js`, `/vision.worker.js`, and `/vision/cube-vision.wasm` must be served as files, not the app's HTML fallback. WASM uses the `application/wasm` MIME type. No backend or cross-origin isolation is required. Builds fail early if the detector binary is absent.
+
+This project is connected to Expo Hosting. After exporting, `npx eas-cli deploy --alias prototype --environment preview` updates the stable test URL. Keep `dist/licenses/` in the deployment with the bundled libraries' notices.
 
 For an existing trusted development certificate:
 
@@ -80,6 +86,8 @@ npm start
 
 The EAS post-install hook regenerates the local solver bundle and Nitro bindings and retrieves the pinned official OpenCV SDK for the build platform, checking the release asset's size and SHA-256 when supplied by GitHub. Apple development signing and registered device access are required. `eas.json` also includes an Android preview APK profile and an iOS simulator profile. Cloud project creation/signing is interactive until the Expo account is connected. Do not put account credentials in source or chat.
 
+Using your friend's Apple Developer membership? Follow [the signing handoff guide](docs/IOS-SIGNING.md). A `credentials.example.json` template and `development-local` profile are included; a JSON file alone cannot replace the certificate's private key and provisioning profile.
+
 Android local builds need Java 17+, Android SDK 36 and NDK 27.1.12297006 plus several GB of available disk space. The generated `android/` and `ios/` directories are disposable Expo outputs; application configuration lives in `app.json`.
 
 ## How the prototype works
@@ -89,7 +97,7 @@ Android local builds need Java 17+, Android SDK 36 and NDK 27.1.12297006 plus se
 - **Assemble:** settled views are associated by center color and shared face edges. Adjacency constraints establish the center map and each face's rotation without prescribing scan order or physical white-up orientation. Color counts, piece uniqueness, edge/corner orientation, chirality, and permutation parity must pass. Conflicting counts request reacquisition; a detected layer twist invalidates the scan.
 - **Solve:** vendored cubejs 1.3.2 implements Kociemba. Initialization and search happen in a Web Worker or a dedicated native worklet runtime. Every returned solution is applied to the input state to verify it. Half turns become two separate quarter turns. Revisions and session epochs reject obsolete results.
 - **Guide:** homography projects an animated curved arrow onto the observed target face. Hidden faces request a whole-cube rotation. Tracking compares the previous state and all 18 legal face turns; only one distinguishable, settled candidate can advance. A different legal move triggers replanning. Ambiguous views hide the arrow; sustained mismatch leads to scanning.
-- **Finish:** the logical solution is followed by fresh, settled observations of all six solved faces. Camera pause, switch, or app backgrounding requires a new scan because unseen turns may have occurred.
+- **Finish:** the logical solution is followed by fresh, settled observations of all six solved faces. Each view must distinguish the unchanged cube from a legal turn; a uniform face alone is insufficient. Blur, ambiguity, or frame gaps invalidate earlier completion checks. Camera pause, switch, or app backgrounding requires a new scan because unseen turns may have occurred.
 
 Core contracts are in `src/core/types.ts`. `CubeState` and camera orientation are separate. `src/session/Session.ts` owns the application state machine. The camera transforms and arrow geometry are in `src/core/geometry.ts`.
 

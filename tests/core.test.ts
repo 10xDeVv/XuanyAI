@@ -56,6 +56,25 @@ describe('automatic scanning',()=>{
     for(let i=0;i<3;i++)result=scanner.observe(observation(changed,['F'],500+i*150));
     expect(result!.invalidated).toBe(true);expect(result!.captured).toHaveLength(0);
   });
+  it('requires fresh consecutive frames after a gap or obscured view',()=>{
+    const scanner=new CubeScanner(),s=state(applyMoves(SOLVED,scramble));
+    scanner.observe(observation(s,['F'],0));scanner.observe(observation(s,['F'],150));
+    scanner.observe({...observation(s,['F'],200),quality:'blur'});
+    expect(scanner.observe(observation(s,['F'],350)).captured).toHaveLength(0);
+    expect(scanner.observe(observation(s,['F'],2000)).captured).toHaveLength(0);
+    scanner.observe(observation(s,['F'],2150));
+    expect(scanner.observe(observation(s,['F'],2300)).captured).toHaveLength(1);
+  });
+  it('targets a lower-confidence conflicting face for reacquisition',()=>{
+    const scanner=new CubeScanner(),s=state(applyMoves(SOLVED,scramble));let t=0,result;
+    for(const f of FACES)for(let n=0;n<3;n++){
+      const o=observation(s,[f],t+=150);
+      if(f==='F'){o.faces[0]!.colors[0]=o.faces[0]!.colors[0]==='white'?'blue':'white';o.faces[0]!.confidence.fill(.7);}
+      result=scanner.observe(o);
+    }
+    expect(result!.state).toBeUndefined();expect(result!.captured).not.toContain(s.centers.F);
+    expect(result!.message).toContain(s.centers.F);
+  });
 });
 describe('complete session',()=>{
   const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
@@ -85,8 +104,33 @@ describe('complete session',()=>{
       await tick();
     }
     expect(session.getSnapshot().stage).toBe('verifying');
-    for(const face of FACES)for(let i=0;i<3;i++)session.observe(observation(session.getSnapshot().cube!,[face],t+=150));
+    for(const faces of [['F','R','U'],['L','D','F']] as Face[][])for(let i=0;i<3;i++)session.observe(observation(session.getSnapshot().cube!,faces,t+=150));
+    expect(session.getSnapshot().stage).toBe('verifying');
+    for(let i=0;i<3;i++)session.observe(observation(session.getSnapshot().cube!,['B','R','D'],t+=150));
     expect(session.getSnapshot().stage).toBe('solved');
+  });
+  it('does not combine old solved views with a hidden turn or tracking loss',async()=>{
+    for(const interruption of ['hidden-turn','blur','gap']){
+      const session=new Session(solver),physical=state(SOLVED);session.start();let t=0;
+      for(const faces of [['R','B','D'],['F','L','U'],['R','F','U'],['L','B','D']] as Face[][])for(let i=0;i<4;i++)session.observe(projected(physical,faces,t+=150));
+      await tick();expect(session.getSnapshot().stage).toBe('verifying');
+      const cube=session.getSnapshot().cube!;
+      for(const faces of [['F','R','U'],['L','D','F']] as Face[][])for(let i=0;i<3;i++)session.observe(observation(cube,faces,t+=150));
+      expect(session.getSnapshot().message).toContain('5/6');
+      if(interruption==='hidden-turn'){
+        const turned={...cube,facelets:moveFacelets(cube.facelets,'B')};
+        for(let i=0;i<3;i++)session.observe(observation(turned,['B'],t+=150));
+        expect(session.getSnapshot().stage).toBe('verifying');
+        session.observe(observation(turned,['B','R','D'],t+=150));
+        expect(session.getSnapshot().stage).toBe('scanning');
+      }else{
+        if(interruption==='blur')session.observe({...observation(cube,['F','R'],t+=150),quality:'blur'});
+        else t+=1000;
+        for(let i=0;i<3;i++)session.observe(observation(cube,['B','R','D'],t+=150));
+        expect(session.getSnapshot().stage).toBe('verifying');
+        expect(session.getSnapshot().message).toContain('3/6');
+      }
+    }
   });
   it('rescans after backgrounding and ignores an obsolete solver result',async()=>{
     const {session}=await scanned();session.suspend();expect(session.getSnapshot().stage).toBe('scanning');expect(session.getSnapshot().cube).toBeUndefined();
@@ -109,6 +153,13 @@ describe('turn verification',()=>{
   it('does not infer an invisible back turn from only the front face',()=>{
     const before=state(applyMoves(SOLVED,scramble)),after=state(moveFacelets(before.facelets,'B')),tracker=new CubeTracker();
     expect(tracker.observe(before,observation(after,['F'],100)).status).toBe('ambiguous');
+  });
+  it('does not confirm across a tracking gap or guess a two-turn mismatch',()=>{
+    const before=state(applyMoves(SOLVED,scramble)),after=state(moveFacelets(before.facelets,'R')),tracker=new CubeTracker();
+    tracker.observe(before,observation(after,['F','R','U'],0));tracker.observe(before,observation(after,['F','R','U'],150));
+    expect(tracker.observe(before,observation(after,['F','R','U'],2000)).status).toBe('settling');
+    const missed=state(applyMoves(before.facelets,['R','U']));
+    expect(tracker.observe(before,observation(missed,['F','R','U'],2200)).status).toBe('lost');
   });
   it('rejects blur and stale frames and requires consecutive settled evidence',()=>{
     const s=state(applyMoves(SOLVED,scramble)),tracker=new CubeTracker(),o=observation(s,['F','R','U'],100);

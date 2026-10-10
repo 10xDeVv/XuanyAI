@@ -36,7 +36,7 @@ export class Session {
   }
   cameraError(message:string){this.epoch++;this.update({stage:'error',message,poses:[],nextMove:undefined});}
   observe(o:CubeObservation){
-    if(o.timestamp<=this.lastObserved)return;this.lastObserved=o.timestamp;
+    if(o.timestamp<=this.lastObserved)return;const gap=o.timestamp-this.lastObserved;this.lastObserved=o.timestamp;
     if(['setup','solved','error'].includes(this.view.stage))return;
     this.update({observation:o});
     if(this.view.stage==='scanning') {
@@ -47,9 +47,17 @@ export class Session {
     if(this.view.stage==='planning')return;
     const cube=this.view.cube;if(!cube)return;
     if(this.view.stage==='verifying') {
-      if(o.quality!=='good'){this.verificationCounts.clear();return;}
+      if(gap>=800||o.quality!=='good'){this.verificationCounts.clear();this.verified.clear();this.tracker.reset();}
+      if(o.quality!=='good'){this.update({poses:[],message:'Keep two sides visible while we check the whole cube.'});return;}
       const poses=matchObservation(cube,o);
       if(!poses){if(o.faces.some(reliableFace))this.rescan();return;}
+      // A uniform face alone cannot reveal a turn of that same face. Keep the
+      // final check subject to the same distinguishing evidence as guidance.
+      const tracking=this.tracker.observe(cube,o);
+      if(tracking.status==='ambiguous'||tracking.status==='lost'||tracking.status==='move'){
+        this.verificationCounts.clear();this.verified.clear();
+        this.update({poses:[],message:'Tilt the cube to show two sides together. Then rotate slowly.'});return;
+      }
       for(const color of this.verificationCounts.keys())if(!poses.some(p=>cube.centers[p.face]===color))this.verificationCounts.delete(color);
       for(const pose of poses) {
         const color=cube.centers[pose.face],old=this.verificationCounts.get(color);
@@ -57,7 +65,7 @@ export class Session {
         this.verificationCounts.set(color,current);
         if(current.count>=3&&o.timestamp-current.since>=220)this.verified.add(color);
       }
-      if(this.verified.size===6)this.update({stage:'solved',poses:[],message:'You did it. Every side, solved.',elapsedMs:Date.now()-this.view.startedAt});
+      if(this.verified.size===6&&tracking.status==='unchanged')this.update({stage:'solved',poses:[],message:'You did it. Every side, solved.',elapsedMs:Date.now()-this.view.startedAt});
       else this.update({message:`Looking good. Rotate once more to check every side (${this.verified.size}/6).`,poses});
       return;
     }
@@ -80,7 +88,7 @@ export class Session {
   }
   private finishOrReplan(cube:CubeState){
     if(cube.facelets!==SOLVED){void this.plan(cube);return;}
-    this.verified.clear();this.verificationCounts.clear();this.update({stage:'verifying',nextMove:undefined,poses:[],message:'One last look. Rotate the cube to check every side.'});
+    this.verified.clear();this.verificationCounts.clear();this.tracker.reset();this.update({stage:'verifying',nextMove:undefined,poses:[],message:'One last look. Keep two sides visible as you rotate to check every side.'});
   }
   private async plan(cube:CubeState){
     const epoch=++this.epoch;this.update({cube,stage:'planning',poses:[],nextMove:undefined,message:this.view.corrections?'Finding your new route…':'Finding your first move…'});

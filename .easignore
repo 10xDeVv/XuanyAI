@@ -14,5 +14,10 @@ modules/cube-vision/build/
 *.p12
 *.mobileprovision
 *.pem
+*.p8
+*.pfx
+*.key
+credentials.json
+certs/
 .env*
 !.env.example

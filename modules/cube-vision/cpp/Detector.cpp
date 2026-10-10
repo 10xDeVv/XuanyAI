@@ -85,6 +85,19 @@ std::string detect(const uint8_t* rgba,int width,int height,int stride) {
   cv::cvtColor(input,rgb,cv::COLOR_RGBA2RGB);cv::cvtColor(rgb,gray,cv::COLOR_RGB2GRAY);
   cv::GaussianBlur(gray,blur,{3,3},0.6);cv::Canny(blur,edges,35,95);
   std::vector<std::vector<cv::Point>> contours;cv::findContours(edges,contours,cv::RETR_LIST,cv::CHAIN_APPROX_SIMPLE);
+  // Acute sticker corners can leave Canny outlines open. Color regions provide
+  // closed boundaries as well, including narrow seams on stickerless pieces.
+  cv::Mat hsv;cv::cvtColor(rgb,hsv,cv::COLOR_RGB2HSV);
+  std::array<cv::Mat,6> masks;for(auto& mask:masks)mask=cv::Mat::zeros(height,width,CV_8UC1);
+  for(int y=0;y<height;y++)for(int x=0;x<width;x++){
+    double certainty;int color=classify(hsv.at<cv::Vec3b>(y,x),certainty);
+    if(certainty>=.65)masks[color].at<uint8_t>(y,x)=255;
+  }
+  for(auto& mask:masks){
+    std::vector<std::vector<cv::Point>> regions;
+    cv::findContours(mask,regions,cv::RETR_EXTERNAL,cv::CHAIN_APPROX_SIMPLE);
+    contours.insert(contours.end(),regions.begin(),regions.end());
+  }
   std::vector<Cell> cells;
   for(const auto& contour:contours) {
     double area=std::abs(cv::contourArea(contour));if(area<65||area>width*height*0.20)continue;

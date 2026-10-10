@@ -102,8 +102,17 @@ std::string detect(const uint8_t* rgba,int width,int height,int stride) {
   for(const auto& contour:contours) {
     double area=std::abs(cv::contourArea(contour));if(area<65||area>width*height*0.20)continue;
     std::vector<cv::Point> polygon;cv::approxPolyDP(contour,polygon,cv::arcLength(contour,true)*0.035,true);
-    if(polygon.size()!=4||!cv::isContourConvex(polygon))continue;
-    Q q=order(polygon);P c=center(q);double shortest=99999,longest=0;
+    if(polygon.size()!=4||!cv::isContourConvex(polygon)){
+      // Rounded stickers often have 6–8 contour corners. Preserve their center
+      // for the lattice fit instead of requiring four sharp sticker corners.
+      const auto rect=cv::minAreaRect(contour);
+      if(rect.size.area()<=0||area/rect.size.area()<.72)continue;
+      P corners[4];rect.points(corners);polygon.clear();
+      for(auto p:corners)polygon.emplace_back(cvRound(p.x),cvRound(p.y));
+    }
+    Q q=order(polygon);const auto moments=cv::moments(contour);
+    P c=std::abs(moments.m00)>1e-6?P(float(moments.m10/moments.m00),float(moments.m01/moments.m00)):center(q);
+    double shortest=99999,longest=0;
     for(int i=0;i<4;i++){double d=cv::norm(q[i]-q[(i+1)%4]);shortest=std::min(shortest,d);longest=std::max(longest,d);}
     if(shortest<6||longest/shortest>4)continue;
     bool duplicate=false;for(const auto& old:cells)if(cv::norm(c-old.center)<std::sqrt(area)*0.18&&std::abs(std::log(area/old.area))<0.4){duplicate=true;break;}
@@ -112,6 +121,76 @@ std::string detect(const uint8_t* rgba,int width,int height,int stride) {
   std::sort(cells.begin(),cells.end(),[](const Cell&a,const Cell&b){return a.area>b.area;});
   if(cells.size()>100)cells.resize(100);
   std::vector<Face> found;
+  int gridCandidates=0;
+  const auto accept=[&](const std::vector<P>& src,const std::vector<P>& dst,double area){
+    auto h=fit(src,dst);if(h.empty())return;
+    Q q={project(h,0,0),project(h,3,0),project(h,3,3),project(h,0,3)};
+    for(auto p:q)if(!std::isfinite(p.x)||!std::isfinite(p.y)||p.x<1||p.y<1||p.x>=width-1||p.y>=height-1)return;
+    std::vector<P> polygon(q.begin(),q.end());if(!cv::isContourConvex(polygon))return;
+    double error=0;for(size_t i=0;i<src.size();i++)error+=cv::norm(project(h,src[i].x,src[i].y)-dst[i]);
+    error/=src.size()*std::sqrt(area);if(error>.13)return;
+    // A diagonal/sheared lattice can connect centers from two different faces.
+    // Its cell axes must agree with the actual sticker edges, not only centers.
+    for(size_t i=0;i<src.size();i++){
+      const auto cell=std::find_if(cells.begin(),cells.end(),[&](const Cell& c){return cv::norm(c.center-dst[i])<.01;});
+      if(cell==cells.end())return;
+      const float x=src[i].x,y=src[i].y;
+      Q predicted={project(h,x-.5f,y-.5f),project(h,x+.5f,y-.5f),project(h,x+.5f,y+.5f),project(h,x-.5f,y+.5f)};
+      double best=-1;
+      for(int rotation=0;rotation<4;rotation++){
+        double agreement=0;
+        for(int k=0;k<4;k++){
+          P a=predicted[(k+1)%4]-predicted[k],b=cell->q[(k+rotation+1)%4]-cell->q[(k+rotation)%4];
+          const double length=cv::norm(a)*cv::norm(b);if(length<1)return;
+          agreement+=a.dot(b)/length;
+        }
+        best=std::max(best,agreement/4);
+      }
+      if(best<.90)return;
+    }
+    gridCandidates++;
+    // Neighbor pairs and grid rotations often describe exactly the same face.
+    // Avoid repeatedly warping/sampling it on a phone's worker thread.
+    for(const auto& old:found)for(int rotation=0;rotation<4;rotation++){
+      double separation=0;for(int k=0;k<4;k++)separation+=cv::norm(old.q[(k+rotation)%4]-q[k]);
+      if(separation/4<1.5)return;
+    }
+    Face f;if(!sample(rgb,gray,q,f))return;
+    f.score=src.size()-error+*std::min_element(f.confidence.begin(),f.confidence.end());
+    auto duplicate=std::find_if(found.begin(),found.end(),[&](const Face&old){return cv::norm(center(old.q)-center(q))<cv::norm(q[0]-q[1])*.4;});
+    if(duplicate==found.end())found.push_back(f);else if(f.score>duplicate->score)*duplicate=f;
+  };
+  // Fit a 3x3 lattice to sticker centers as well as sticker corners. A phone's
+  // small, rounded, or slightly blurred stickers have unreliable corner angles
+  // even when all nine centers are easy to locate. This route requires all nine
+  // distinct regions and still passes the same geometry and color checks.
+  for(const auto& seed:cells){
+    std::vector<std::pair<double,int>> neighbors;
+    const double scale=std::sqrt(seed.area);
+    for(size_t i=0;i<cells.size();i++){
+      const double d=cv::norm(cells[i].center-seed.center),ratio=cells[i].area/seed.area;
+      if(d>scale*.65&&d<scale*2.4&&ratio>.4&&ratio<2.5)neighbors.emplace_back(d,int(i));
+    }
+    std::sort(neighbors.begin(),neighbors.end());if(neighbors.size()>8)neighbors.resize(8);
+    if(neighbors.size()<4)continue;
+    for(const auto& a:neighbors)for(const auto& b:neighbors){
+      P u=cells[a.second].center-seed.center,v=cells[b.second].center-seed.center;
+      const double lengths=a.first*b.first;
+      if(u.x*v.y-u.y*v.x<lengths*.45||std::abs(u.dot(v))/lengths>.72)continue;
+      std::vector<P> src,dst;std::set<int> used;
+      for(int k=0;k<9;k++){
+        P p=seed.center+u*float(k%3-1)+v*float(k/3-1);
+        double best=scale*.38;int chosen=-1;
+        for(size_t n=0;n<cells.size();n++){
+          const double ratio=cells[n].area/seed.area;if(ratio<.3||ratio>3.3||used.count(int(n)))continue;
+          double d=cv::norm(p-cells[n].center);if(d<best){best=d;chosen=int(n);}
+        }
+        if(chosen<0)break;
+        used.insert(chosen);src.push_back({float(k%3)+.5f,float(k/3)+.5f});dst.push_back(cells[chosen].center);
+      }
+      if(src.size()==9)accept(src,dst,seed.area);
+    }
+  }
   for(const auto& seed:cells)for(float spacing:{1.10f,1.22f,1.36f})for(int slot=0;slot<9;slot++) {
     float col=float(slot%3),row=float(slot/3);
     Q local={P(col,row),P(col+1,row),P(col+1,row+1),P(col,row+1)},expanded;
@@ -129,19 +208,18 @@ std::string detect(const uint8_t* rgba,int width,int height,int stride) {
       if(chosen>=0){used.insert(chosen);src.push_back({float(k%3)+.5f,float(k/3)+.5f});dst.push_back(cells[chosen].center);}
     }
     if(src.size()<8)continue;
-    h=fit(src,dst);if(h.empty())continue;
-    Q q={project(h,0,0),project(h,3,0),project(h,3,3),project(h,0,3)};
-    bool inside=true;for(auto p:q)if(p.x<1||p.y<1||p.x>=width-1||p.y>=height-1)inside=false;
-    if(!inside)continue;
-    double error=0;for(size_t i=0;i<src.size();i++)error+=cv::norm(project(h,src[i].x,src[i].y)-dst[i]);
-    error/=src.size()*std::sqrt(seed.area);if(error>.13)continue;
-    Face f;if(!sample(rgb,gray,q,f))continue;
-    f.score=src.size()-error+*std::min_element(f.confidence.begin(),f.confidence.end());
-    auto duplicate=std::find_if(found.begin(),found.end(),[&](const Face&old){return cv::norm(center(old.q)-center(q))<cv::norm(q[0]-q[1])*.4;});
-    if(duplicate==found.end())found.push_back(f);else if(f.score>duplicate->score)*duplicate=f;
+    accept(src,dst,seed.area);
   }
   std::sort(found.begin(),found.end(),[](const Face&a,const Face&b){return a.score>b.score;});
-  if(found.size()>3)found.resize(3);
+  std::vector<Face> distinct;
+  for(const auto& face:found){
+    if(std::any_of(distinct.begin(),distinct.end(),[&](const Face& other){
+      double edge=0;for(int i=0;i<4;i++)edge=std::max(edge,cv::norm(face.q[(i+1)%4]-face.q[i]));
+      return cv::norm(center(face.q)-center(other.q))<edge*.3;
+    }))continue;
+    distinct.push_back(face);if(distinct.size()==3)break;
+  }
+  found=std::move(distinct);
   std::ostringstream out;out.precision(7);
   std::string quality=found.empty()?"missing":"good";
   if(!found.empty()&&std::all_of(found.begin(),found.end(),[](const Face&f){return f.sharpness<18;}))quality="blur";
@@ -154,7 +232,7 @@ std::string detect(const uint8_t* rgba,int width,int height,int stride) {
     out<<"],\"quad\":[";for(int j=0;j<4;j++){if(j)out<<',';out<<"{\"x\":"<<f.q[j].x<<",\"y\":"<<f.q[j].y<<'}';}
     out<<"],\"sharpness\":"<<f.sharpness<<",\"glare\":"<<f.glare<<'}';
   }
-  out<<"],\"processingMs\":"<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count()<<'}';
+  out<<"],\"diagnostics\":{\"regions\":"<<cells.size()<<",\"grids\":"<<gridCandidates<<"},\"processingMs\":"<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count()<<'}';
   return out.str();
 }
 }

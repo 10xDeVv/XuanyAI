@@ -17,7 +17,7 @@ npx eas-cli whoami
 npx eas-cli project:info
 ```
 
-Use your own Expo login. The project ID must be **2937eb1d-5969-4010-bb76-9cf8ded821fe**. Its bundle identifier is **com.xuanyai.pointscansolve**. The existing `app.json` is already linked; do not initialize a replacement Expo project. If access is denied, accept the Expo invitation and retry.
+Use your own Expo login. The project is [@xuanyai/point-scan-solve](https://expo.dev/accounts/xuanyai/projects/point-scan-solve) in the **XuanyAI** organization. The project ID must be **2937eb1d-5969-4010-bb76-9cf8ded821fe**. Its bundle identifier is **com.xuanyai.pointscansolve**. The existing `app.json` is already linked; do not initialize a replacement Expo project. If access is denied, accept the Expo invitation and retry.
 
 GitHub's **Code → Download ZIP** is an alternative to `git clone`. The cloud build needs the source folder, not the local `.tools`, `node_modules`, generated native directories, or cached SDKs. You do not need to install Xcode, OpenCV, or Emscripten to request this cloud build; its install hook prepares the native dependencies.
 

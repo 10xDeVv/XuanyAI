@@ -1,10 +1,12 @@
 /* Shared C++ detector. Never receives a frame until WASM initialization completes. */
 let engine=null,ptr=0,capacity=0;
+const version=new URL(self.location.href).searchParams.get('v');
+const asset=name=>'/vision/'+name+(version?'?v='+encodeURIComponent(version):'');
 self.onmessage=async({data})=>{
   try {
     if(data.type==='init') {
-      importScripts('/vision/cube-vision.js');
-      engine=await createCubeVision({locateFile:name=>'/vision/'+name});
+      importScripts(asset('cube-vision.js'));
+      engine=await createCubeVision({locateFile:asset});
       self.postMessage({type:'ready'});return;
     }
     if(data.type!=='frame'||!engine)return;

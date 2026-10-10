@@ -32,7 +32,13 @@ export class CubeScanner {
     if(o.quality==='glare') {this.pending.clear();this.pendingEdges.clear();return result('Tilt the cube away from the light.');}
     const visible=o.faces.filter(reliableFace);
     for(const c of this.pending.keys())if(!visible.some(f=>f.colors[4]===c))this.pending.delete(c);
-    if(!visible.length) {this.pendingEdges.clear();return result('Bring the cube into view, with your fingers near its edges.');}
+    if(!visible.length) {
+      this.pendingEdges.clear();
+      if(o.faces.some(f=>f.glare>=.22))return result('Tilt the cube away from the light so the colors are clear.');
+      if(o.faces.some(f=>f.sharpness<18))return result('Hold still a little farther from the camera so the squares can focus.');
+      if(o.faces.length||o.diagnostics?.grids)return result('The colors aren’t clear yet. Try even light or switch to the back camera.');
+      return result('Show one complete 3 × 3 face first. Keep fingers off the squares and pause.');
+    }
     let invalidated=false;
     for(const face of visible) {
       const center=face.colors[4],sig=signature(face.colors);
@@ -64,7 +70,7 @@ export class CubeScanner {
       if(sa&&sb&&p.count>=3&&o.timestamp-p.since>=220&&!this.edges.some(e=>JSON.stringify(e)===key))this.edges.push(c);
     }
     for(const key of this.pendingEdges.keys())if(!visibleEdges.has(key))this.pendingEdges.delete(key);
-    if(this.faces.size<6) return result(`${this.faces.size} of 6 faces captured. Keep rotating the whole cube.`);
+    if(this.faces.size<6) return result(this.faces.size?`${this.faces.size} of 6 faces captured. Turn the whole cube a little, then pause with two sides visible.`:'Face found. Hold still for a moment to capture it.');
     const counts=new Map<CubeColor,number>();
     for(const f of this.faces.values())for(const c of f.grid)counts.set(c,(counts.get(c)??0)+1);
     if([...counts.values()].some(n=>n!==9)||counts.size!==6){

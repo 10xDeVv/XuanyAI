@@ -26,6 +26,7 @@ export type CubeObservation = {
   transform: PreviewTransform;
   quality: 'good' | 'blur' | 'glare' | 'missing' | 'occluded';
   processingMs: number;
+  diagnostics?: { regions:number; grids:number };
 };
 export type CubeState = { facelets: string; centers: CenterMap; revision: number };
 export type FacePose = { face: Face; quad: Quad; rotations: number[] };

@@ -8,6 +8,8 @@ import {createSolver} from '../solver/createSolver';
 import {Session,SessionView} from '../session/Session';
 import {CubeArt} from './CubeArt';
 import {GuidanceOverlay} from './GuidanceOverlay';
+import {PhotoImport} from './PhotoImport';
+import {CubeState} from '../core/types';
 
 const ink='#17271F',muted='#738077',lime='#D1F58A';
 function Mark(){return <View style={s.mark}>{Array.from({length:9},(_,i)=><View key={i} style={[s.markCell,i===2&&{opacity:.25}]}/>)}</View>;}
@@ -25,6 +27,7 @@ export default function SolverScreen(){
   const [localError,setLocalError]=useState<string|null>(null);
   const [confirmed,setConfirmed]=useState(false);
   const [saveFrameRequest,setSaveFrameRequest]=useState(0);
+  const [photo,setPhoto]=useState(false);
   useEffect(()=>()=>sessionRef.current?.dispose(),[]);
   useEffect(()=>{if(!view.confirmedAt)return;setConfirmed(true);const timeout=setTimeout(()=>setConfirmed(false),850);return()=>clearTimeout(timeout);},[view.confirmedAt]);
   const start=()=>{
@@ -36,6 +39,10 @@ export default function SolverScreen(){
     catch(e){setLocalError(e instanceof Error?e.message:'The camera could not start.');}
   };
   const observe=useCallback((o:CubeObservation)=>sessionRef.current?.observe(o),[]);
+  const guidePhoto=(cube:CubeState)=>{
+    try{sessionRef.current?.dispose();const next=new Session(createSolver());sessionRef.current=next;setSession(next);setLocalError(null);setPaused(false);setPhoto(false);setStatus('Opening camera');next.startFromPhoto(cube);scroll.current?.scrollTo({y:0,animated:false});}
+    catch(e){setLocalError(e instanceof Error?e.message:'The camera guide could not start.');}
+  };
   const onError=useCallback((message:string)=>{sessionRef.current?.cameraError(message);setStatus('Camera paused');},[]);
   const suspend=useCallback(()=>sessionRef.current?.suspend(),[]);
   const stage=view.stage,setup=stage==='setup',error=stage==='error'||!!localError,solved=stage==='solved';
@@ -85,6 +92,7 @@ export default function SolverScreen(){
           {(setup||error||solved)?<Action label={error?'Try again':solved?'Solve another cube':'Let’s solve your cube'} onPress={start}/>:<Action label={paused?'Resume camera':'Pause for a moment'} secondary onPress={()=>{suspend();setPaused(p=>!p);}}/>}
           {!setup&&!error&&!solved&&<Pressable accessibilityRole="button" onPress={()=>session?.rescan()} style={s.rescan}><Text style={s.rescanText}>Start a fresh scan</Text></Pressable>}
           {setup&&<Text style={s.permissionNote}>We’ll ask for camera access. No account needed.</Text>}
+          {(setup||error||solved)&&<View style={{marginTop:14}}><Action label="Solve from a picture" secondary onPress={()=>setPhoto(true)}/></View>}
           {solved&&<Text style={s.permissionNote}>{view.corrections?`${view.corrections} detour${view.corrections===1?'':'s'}. Still got there.`:'One cube. A very good feeling.'}</Text>}
         </View>
       </View>
@@ -96,6 +104,7 @@ export default function SolverScreen(){
       {!compact&&<View style={s.footer}><Text style={s.footerText}>A little patience. A little point.</Text><Text style={s.footerText}>MADE FOR YOUR FIRST SOLVE  ↗</Text></View>}
     </ScrollView>
     <Modal visible={help} transparent animationType="fade" onRequestClose={()=>setHelp(false)}><View style={s.modalShade}><ScrollView style={{width:'100%',maxWidth:470,maxHeight:'95%',backgroundColor:'#FCFDF8',borderRadius:22}} contentContainerStyle={s.modal}><Text style={s.panelTitle}>Set yourself up for a solve.</Text><Text style={s.panelBody}>1. Prop up your phone with the screen facing you. The front camera gives you both hands back.{ '\n\n'}2. Use a regular six-color 3×3 in bright, even light. Keep fingers near the edges.{ '\n\n'}3. Start with one complete face in view and pause until it is captured. Then turn the whole cube a little, pause, and show neighboring faces together. Keep the layers still.{ '\n\n'}4. Follow one arrow, then pause. If the view gets unclear, tilt the cube so we can catch up.{ '\n\n'}Camera images are processed on your device and aren’t uploaded.</Text>{Platform.OS==='web'&&active&&<View style={{gap:10}}><Text style={s.panelBody}>Scan stuck at zero? Try the back camera in even light. You can save a camera photo to help diagnose it. The photo stays on your device; nothing is uploaded.</Text><Action label="Save a camera photo" secondary onPress={()=>{setSaveFrameRequest(n=>n+1);setHelp(false);}}/></View>}<Action label="Got it" secondary onPress={()=>setHelp(false)}/></ScrollView></View></Modal>
+    {photo&&<PhotoImport onClose={()=>setPhoto(false)} onGuide={guidePhoto} onScan={()=>{setPhoto(false);start();}}/>}
   </SafeAreaView>;
 }
 

@@ -1,7 +1,7 @@
 import { CubeScanner, reliableFace } from '../core/scanner';
 import { CubeTracker, matchObservation } from '../core/tracker';
-import { SOLVED } from '../core/cube';
-import { CubeObservation,CubeState,Move,FacePose,CubeColor,SolverAdapter,FACES } from '../core/types';
+import { SOLVED,validateCube } from '../core/cube';
+import { CubeObservation,CubeState,Move,FacePose,CubeColor,SolverAdapter,FACES,COLORS } from '../core/types';
 
 export type Stage='setup'|'scanning'|'planning'|'guiding'|'recovering'|'verifying'|'solved'|'error';
 export type SessionView={
@@ -28,6 +28,12 @@ export class Session {
   private update(patch:Partial<SessionView>){this.view={...this.view,...patch};for(const listener of this.listeners)listener();}
   start(){this.epoch++;this.scanner.reset();this.tracker.reset();this.queue=[];this.verified.clear();this.verificationCounts.clear();this.lastObserved=-Infinity;this.lostSince=null;this.view=initial();this.update({stage:'scanning',message:'Rotate the whole cube slowly. Keep each layer in place.',startedAt:Date.now()});}
   rescan(){const {movesDone,corrections,startedAt}=this.view;this.start();this.update({movesDone,corrections,startedAt,message:'Let’s take another look. Rotate the whole cube slowly.'});}
+  startFromPhoto(cube:CubeState){
+    const validity=validateCube(cube.facelets);
+    if(!validity.valid)throw new Error(validity.reason);
+    if(new Set(FACES.map(f=>cube.centers[f])).size!==6||FACES.some(f=>!COLORS.includes(cube.centers[f])))throw new Error('The photo needs six different center colors.');
+    this.start();this.update({captured:FACES.map(f=>cube.centers[f])});void this.plan(cube);
+  }
   suspend(){
     this.tracker.reset();this.verificationCounts.clear();this.verified.clear();this.lastObserved=-Infinity;
     // The user may turn unseen layers while the camera is paused or the app is backgrounded.

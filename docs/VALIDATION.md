@@ -8,7 +8,7 @@ Updated October 9, 2026 (America/Toronto). **Physical acceptance remains incompl
 | --- | --- | --- |
 | TypeScript | Pass | `tsc --noEmit`, strict project settings |
 | Expo configuration/dependencies | 21/21 pass | `artifacts/build-logs/expo-doctor.log` |
-| Automated tests | 20/20 pass | Vitest; includes rounded-sticker capture at three sizes and covered-grid rejection |
+| Automated tests | 27/27 pass | Vitest; includes rounded-sticker capture, covered-grid rejection, labeled picture assembly and both six-panel layouts through the compiled production worker |
 | Cube model and solver | Pass | All 18 legal turns compared with cubejs, inverse/invariant tests, 20 randomized solutions applied and verified |
 | Capture and tracking | Pass on synthetic observations | Arbitrary views, adjacency/orientation assembly, invalid state reacquisition, layer-change invalidation, wrong turns, ambiguity, stale results, and fresh six-face completion. Completion rejects a hidden last-face turn and discards earlier checks after blur or a frame gap. |
 | Compiled detector integration | Pass on synthetic pixels | Production C++/OpenCV WASM detects all three faces in four differently oriented views, reconstructs a known scramble, and identifies correct and alternative settled turns |
@@ -29,6 +29,18 @@ The follow-up patch adds a sticker-center lattice fit for rounded/small stickers
 Live worker responses had `Cache-Control: public, max-age=3600`. Worker, detector JavaScript, and WASM requests now share a content-derived version so an update cannot silently retain the previous detector for an hour. The app distinguishes missing grids, unclear colors, a detected face awaiting a pause, and processing that is too slow. While the camera is active, **Help → Save a camera photo** saves a local JPEG for voluntary debugging; nothing is uploaded.
 
 Independent exploratory photos from [rubiks-cube-tracker](https://github.com/dwalton76/rubiks-cube-tracker/tree/master/test-data/3x3x3-random-01) and the [Rubick-s-Cube-Dataset sample montage](https://github.com/eyeeco/Rubick-s-Cube-Dataset) still expose color/lighting failures. In particular, the overexposed R photograph remains rejected. These images were used locally and are not bundled. Do not claim that the user's iPhone failure is fixed until their actual camera trial succeeds.
+
+## Photo import
+
+The picture importer reads six panels in 3×2 or 2×3 layouts, then requires face-name and orientation review. Recognition runs in the production browser WASM worker or the native detector on a separate worklet runtime. Native image decoding/cropping uses asynchronous Nitro Image operations; an explicit render applies iOS image orientation before cropping. Expo ImagePicker supplies the system selection UI ([official API documentation](https://docs.expo.dev/versions/latest/sdk/imagepicker/)).
+
+- The user's supplied 1448×1086 diagram was selected through the browser's real file chooser. All 54 detected colors match the visible image. Up and Back both contain white centers, and no face has a blue center. The UI identifies this conflict and disables solution/camera import. The source image is not published or committed. `artifacts/photo-invalid-centers.jpg` records the local result.
+- Generated known-scramble diagrams exercise both supported layouts in the production worker with the actual compiled detector. All grids, labels, and reconstructed facelets are checked. A valid assembled scramble is solved and the returned moves are applied back to the exact input state.
+- Browser UI: a generated valid diagram was selected with the real file chooser, all six grids were read correctly, and the solver produced 22 verified quarter turns. Tapping through all steps ends at “Instructions complete” and asks for a camera check, without a physical-solve claim. Browser console reported no errors. `artifacts/photo-manual-completion.jpg` records the result. This was desktop Chromium; physical mobile picker testing remains open.
+- Strict TypeScript, production web export, and sequential native Android/iOS Hermes exports passed after adding photo import. Exports do not establish native execution or signing.
+- Unit tests cover all four detector corner origins, arbitrary face label order and rotations, missing/unclear faces, duplicate names/centers, incorrect color counts, and impossible pieces. A solved picture enters camera verification instead of declaring the physical cube solved.
+- Manual picture steps are explicitly unverified. Switching to the camera uses the state after the turns the user marked complete; ambiguous or inconsistent observations follow existing recovery/rescan behavior.
+- Native photo import is implemented but has not been exercised on a physical Android phone or iPhone. Existing Android APKs predate the new picker dependency and need rebuilding. Neither screenshot imports nor synthetic fixtures resolve the reported iPhone live-camera failure above.
 
 ## Builds and access
 

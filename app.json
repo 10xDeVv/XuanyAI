@@ -31,7 +31,8 @@
     },
     "plugins": [
       "expo-router",
-      "expo-dev-client"
+      "expo-dev-client",
+      ["expo-image-picker", {"photosPermission":"Choose a cube picture to read its colors on this device.","microphonePermission":false}]
     ],
     "extra": {
       "router": {},

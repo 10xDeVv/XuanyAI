@@ -6,6 +6,16 @@ A local-first camera prototype for a standard six-color 3×3 cube. TypeScript, E
 
 **Dax / iPhone signing:** start with [the collaborator setup guide](docs/DAX-SETUP.md) to clone this repository, accept Expo access, register phones, and create the first signed iPhone build using your own Apple Developer account.
 
+## Solve from a picture
+
+Choose **Solve from a picture** on the start screen. Import one image with six separate, evenly spaced face panels: three columns by two rows, or two columns by three rows. Each panel must show a complete 3×3 grid. Processing stays on the device, using the same OpenCV detector as the camera.
+
+Review the detected colors, face names, and rotations before continuing. The initial panel order is Up, Front, Right, Left, Down, Back (left to right, then top to bottom); labels can be changed. Text labels are not recognized automatically. Face orientation follows the outside-view URFDLB convention: Up is above Front/Right/Left/Back, Back is above Up, and Front is above Down. A single perspective photo cannot supply hidden faces; arbitrary collages and unfolded cross-shaped nets are not supported yet.
+
+The importer checks unique centers, nine squares of each color, pieces, orientations, and permutation parity. Invalid images receive a specific explanation and cannot reach the solver. Valid images offer plain-language quarter-turn steps or a handoff to the camera guide. Manual steps never confirm physical turns or declare a physical cube solved. Fresh camera observations are still required.
+
+The native picker uses `expo-image-picker`; install a new development build after pulling this update. Web photo import works without camera permission. Native photo decoding, the system picker, and camera handoff still need physical Android/iPhone tests.
+
 ## Run the browser app
 
 Use Node 22.16 or newer supported LTS, Python 3, CMake, Ninja, and Emscripten **4.0.15**. Node 20.19.3 is too old for this Expo version.

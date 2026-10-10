@@ -25,7 +25,8 @@ The synthetic pixel renderer uses known colored polygons. These tests catch geom
 - HTTPS preview: https://point-scan-solve-10xdevv--prototype.expo.app
 - Expo project: https://expo.dev/accounts/10xdevv/projects/point-scan-solve
 - Initial Android development build **compiled successfully**, including the C++ detector and all four CPU architectures: https://expo.dev/accounts/10xdevv/projects/point-scan-solve/builds/48ac67d4-71b9-4f04-890f-052686f2d2ed . It predates the color-region detector correction and is not the final acceptance binary.
-- Updated detector build is in progress: https://expo.dev/accounts/10xdevv/projects/point-scan-solve/builds/b2c66005-80ef-4459-a15a-d2c983828a7e . Development builds load the current JavaScript from the project's Metro server.
+- Updated detector development build **compiled successfully**: https://expo.dev/accounts/10xdevv/projects/point-scan-solve/builds/b2c66005-80ef-4459-a15a-d2c983828a7e . Use this build for Android trials. Development builds load the current JavaScript from the project's Metro server; physical camera behavior remains untested.
+- Installable Android APK: https://expo.dev/artifacts/eas/WguMP74DmvDXvcZVb7wm5Fm_Uqc3KWcX51ho1IkQmrI.apk . Start `npm run build:workers` and `npx expo start --dev-client` on a computer reachable from the test phone.
 - Native Android/iOS JavaScript and Hermes bytecode exports passed. A concurrent export encountered a Windows temporary-file permission error; sequential exports with a project-local temporary directory succeeded. Native exports alone do not prove native compilation or camera execution.
 - iPhone device build cannot be signed yet. The user is coordinating credentials with the Apple Developer account holder; see [IOS-SIGNING.md](IOS-SIGNING.md).
 - Local Android compilation was stopped by insufficient disk space while downloading the required NDK. Cloud compilation is being used instead.

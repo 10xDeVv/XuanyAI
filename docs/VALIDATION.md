@@ -8,7 +8,7 @@ Updated October 10, 2026 (America/Toronto). **Physical acceptance remains incomp
 | --- | --- | --- |
 | TypeScript | Pass | `tsc --noEmit`, strict project settings |
 | Expo configuration/dependencies | 21/21 pass | `artifacts/build-logs/expo-doctor.log` |
-| Automated tests | 49/49 pass | Vitest; includes physical cube regressions, rectangular diagrams, unfolded-net geometry/labels, all six missing-face hints, cropped Back rejection, and larger-grid rejection through compiled WASM |
+| Automated tests | 51/51 pass | Vitest; includes physical cube regressions, rectangular diagrams, unfolded-net geometry/labels, all six missing-face hints, cropped Back rejection, larger-grid rejection, and portrait frame-resolution regression through compiled WASM |
 | Cube model and solver | Pass | All 18 legal turns compared with cubejs, inverse/invariant tests, 20 randomized solutions applied and verified |
 | Capture and tracking | Pass on synthetic observations | Arbitrary views, adjacency/orientation assembly, invalid state reacquisition, layer-change invalidation, wrong turns, ambiguity, stale results, and fresh six-face completion. Completion rejects a hidden last-face turn and discards earlier checks after blur or a frame gap. |
 | Compiled detector integration | Pass on synthetic pixels | Production C++/OpenCV WASM detects all three faces in four differently oriented views, reconstructs a known scramble, and identifies correct and alternative settled turns |
@@ -57,6 +57,14 @@ Picture capture and review now require all nine independent sticker regions to s
 The browser MediaStream test captured a generated, known-valid net, assigned U/L/F/R/B/D correctly, validated all 54 colors, and generated 22 quarter-turn instructions (`artifacts/net-captured-review.jpg`, `artifacts/net-solution-camera.jpg`). The supplied cropped screenshot remained in scanning when streamed with padding at 640×480; the app requested clearer Front and Down grids because those faint white-square boundaries were incomplete at that scale (`artifacts/net-cropped-camera.jpg`). The direct 640×605 detector test requested Back instead. These differing requests demonstrate resolution sensitivity, not successful capture of the cropped example. Browser console reported no errors. Production web and both native Hermes exports passed; physical device camera testing is still pending.
 
 The unfolded-net update is published at the prototype alias. Its worker, detector JavaScript/WASM, and solver worker match the tested export byte-for-byte, return HTTP 200, and use the appropriate MIME types. Detector asset version: `753713471457fab2`. The refreshed published home screen loads without console errors. The generated complete test net is available locally at `artifacts/valid-net.png` for a paper/screen camera trial.
+
+## Portrait camera capture correction
+
+The user subsequently confirmed that the complete test net also stalls with some faces detected, fewer than six. This is another failed real-camera trial, despite the previous landscape MediaStream test. A local reproduction places the same `artifacts/valid-net.png` at 80% of the width of a 720×1280 portrait video. The original camera component downsized it to 360×640, erasing faint sticker boundaries; the actual browser camera flow remained at **2/6** clear panels (`artifacts/portrait-camera-before.jpg`).
+
+Picture mode now retains up to 1280 pixels on the long side without upscaling the source. Physical cube frames retain their 640-pixel limit. Auto-detection locks the session into picture mode so partial subsequent frames cannot repeatedly lower resolution. Native frame output requests 1280 for pictures, and the native C++ wrapper no longer reduces those frames back to 640; this requires a new native build. Preview coordinates continue to use the dimensions actually sent to detection. The detector, nine-region requirement, confidence limits, and settling checks are unchanged.
+
+With that correction, the same browser MediaStream reaches six clear panels, review, and a valid 54-square state (`artifacts/portrait-camera-after.jpg`). This is a controlled before/after browser test, not an iPhone camera recording. Two added tests exercise portrait pixel data through the production worker and verify both exact state capture and rejection after covering the Back column, plus retention of picture mode through partial frames. Strict TypeScript and all 51 automated tests pass. Actual iPhone retesting, including latency from the larger frames, remains required. A distant diagram can still be too small; all six faces should fill most of the camera width.
 
 ## Photo import
 

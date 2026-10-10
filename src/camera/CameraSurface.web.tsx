@@ -3,6 +3,7 @@ import { CameraSurfaceProps } from './types';
 import { CubeObservation } from '../core/types';
 import { reliableFace } from '../core/scanner';
 import { VISION_VERSION } from './visionVersion';
+import { cameraFrameSize } from './frameSize';
 
 export default function CameraSurface(props:CameraSurfaceProps){
   const video=useRef<HTMLVideoElement>(null),callbacks=useRef(props);callbacks.current=props;
@@ -62,8 +63,7 @@ export default function CameraSurface(props:CameraSurfaceProps){
         timer=setInterval(()=>{
           if(!ready||busy||document.hidden||!context||element.readyState<2||!element.videoWidth)return;
           if(element.currentTime===lastFrame)return;lastFrame=element.currentTime;
-          const factor=Math.min(1,640/Math.max(element.videoWidth,element.videoHeight));
-          const width=Math.round(element.videoWidth*factor),height=Math.round(element.videoHeight*factor);
+          const {width,height}=cameraFrameSize(element.videoWidth,element.videoHeight,callbacks.current.picture);
           if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;}
           try{
             context.drawImage(element,0,0,width,height);

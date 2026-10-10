@@ -69,7 +69,7 @@ export default function SolverScreen(){
       <View style={[s.main,wide&&{flexDirection:'row'},compact&&{gap:0}]}>
         <View style={[s.viewerColumn,wide&&{flex:1.5}]}>
           <View style={[s.viewer,{height:wide?490:compact?Math.max(230,Math.min(380,height*.42)):320}]}>
-            {active&&<CameraSurface active={active} facing={facing} saveFrameRequest={saveFrameRequest} onObservation={observe} onError={onError} onStatus={setStatus} onSuspend={suspend}/>}
+            {active&&<CameraSurface active={active} facing={facing} picture={diagram&&stage==='scanning'} saveFrameRequest={saveFrameRequest} onObservation={observe} onError={onError} onStatus={setStatus} onSuspend={suspend}/>}
             {(!active||setup)&&<View style={s.illustration}><View style={s.orbit}/><View style={s.orbitInner}/><View style={{width:285,height:300}}><CubeArt/></View></View>}
             {active&&!paused&&<GuidanceOverlay observation={view.observation} poses={view.poses} move={view.nextMove} panels={diagram}/>}
             <View style={s.viewerTop}><View style={s.liveChip}><View style={[s.dot,{backgroundColor:active?lime:'#7A887E'}]}/><Text style={s.liveText}>{active?'LIVE GUIDE':solved?'NICE WORK':'CAMERA PREVIEW'}</Text></View><Text style={s.viewerTag}>3 × 3</Text></View>

@@ -6,6 +6,9 @@ import {createCubeVision} from '../../modules/cube-vision/src';
 import {CameraSurfaceProps} from './types';
 import {CubeObservation} from '../core/types';
 
+// Stable object identities keep VisionCamera from rebuilding its output on each observation.
+const CUBE_RESOLUTION={width:640,height:480},PICTURE_RESOLUTION={width:1280,height:960};
+
 export default function CameraSurface(props:CameraSurfaceProps){
   const callbacks=useRef(props);callbacks.current=props;
   const {hasPermission,requestPermission}=useCameraPermission();
@@ -16,7 +19,7 @@ export default function CameraSurface(props:CameraSurfaceProps){
   const epoch=useRef({key:'',value:0});
   const mounted=useRef(true);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;epoch.current.value++;};},[]);
-  const key=`${props.facing}:${props.active}:${foreground}`;
+  const key=`${props.facing}:${props.active}:${foreground}:${!!props.picture}`;
   if(epoch.current.key!==key)epoch.current={key,value:epoch.current.value+1};
   const currentEpoch=epoch.current.value;
   useEffect(()=>{
@@ -30,7 +33,7 @@ export default function CameraSurface(props:CameraSurfaceProps){
   },[]);
   const fail=useCallback((message:string,requestEpoch?:number)=>{if(mounted.current&&(requestEpoch===undefined||requestEpoch===epoch.current.value))callbacks.current.onError(message);},[]);
   const output=useFrameOutput({
-    targetResolution:{width:640,height:480},pixelFormat:'rgb',enablePhysicalBufferRotation:true,enablePreviewSizedOutputBuffers:true,
+    targetResolution:props.picture?PICTURE_RESOLUTION:CUBE_RESOLUTION,pixelFormat:'rgb',enablePhysicalBufferRotation:true,enablePreviewSizedOutputBuffers:!props.picture,
     onFrame(frame){
       'worklet';
       const capturedAt=Date.now();

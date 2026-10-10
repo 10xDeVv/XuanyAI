@@ -54,6 +54,9 @@ export class Session {
       const diagram=this.diagram.observe(o);
       if(diagram.read){this.update({stage:'picture',picture:diagram.read,diagramCount:6,captured:[],poses:[],nextMove:undefined,message:'Picture captured. Check the six face names and colors.'});return;}
       if(this.captureMode==='diagram'||o.faces.length>3||o.largerGrid){
+        // Keep picture resolution after discovering a sheet, even if a later
+        // frame loses a few grids. Switching resolutions each frame loses detail.
+        this.captureMode='diagram';
         this.scanner.reset();this.update({captured:[],diagramCount:diagram.count,message:diagram.message??(diagram.layout?'Six panels found. Hold still for a moment.':`Picture scan: ${diagram.count}/6 clear grids. Show a complete unfolded net or six panels in two or three columns. Keep the top of the picture upright.`)});return;
       }
       this.update({diagramCount:undefined});

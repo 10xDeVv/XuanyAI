@@ -12,6 +12,8 @@ Choose **Point camera at a picture**, then aim the back camera at a printed or s
 
 Detection uses the whole camera frame and retains separate panels even when their centers have the same color. The preview shows the whole processed frame, with aligned outlines. Capture requires four matching, clear observations over at least 450 ms; blur, missing panels, changes, movement, or a frame gap restart this pause. This is a prototype for reasonably straight-on diagrams with moderate tilt; glare, small panels, and extreme perspective can prevent recognition.
 
+Picture scanning preserves frames up to 1280 pixels on the long side; physical cube tracking uses 640. The former 640-pixel picture limit lost faint white-square outlines when a landscape net was viewed through portrait video. Fill most of the camera width with the diagram while keeping every face visible; turning the phone sideways can help. Auto-detected pictures stay in picture mode until a new physical-cube scan is started.
+
 After capture, check the displayed colors, face names, and rotations. In an unfolded net, geometry assigns Up, Left, Front, Right, Back, Down in reading order. Separate rectangular panels default to Up, Front, Right, Left, Down, Back. Text labels are not read automatically. A five-face net requests the missing face; no cropped squares are invented. A detected 4×4 grid receives an unsupported-size message instead of treating its 3×3 windows as a cube. Other cube sizes and other unfolded-net arrangements are outside this prototype.
 
 Invalid diagrams are recognized but cannot be solved: for example, two white centers are not a valid six-color cube. A picture supplies a starting state; physical turn verification requires bringing the real cube into view.

@@ -23,6 +23,8 @@ GitHub's **Code → Download ZIP** is an alternative to `git clone`. The cloud b
 
 If you cloned earlier, run `git pull` and `npm ci` before building. The photo solver adds `expo-image-picker`, so it requires a new native development client. Earlier APKs do not contain that module. The browser update is available without installing an app.
 
+The latest update also changes the shared C++ detector to recognize six-panel pictures directly through the camera. Pull the latest source before the iPhone build; a JavaScript refresh alone cannot update an older native detector. Test **Point camera at a picture** with a printed or screen-displayed diagram, keeping all six panels upright and visible.
+
 ## 2. Register the test iPhones
 
 ```sh

@@ -42,6 +42,8 @@ A local browser test streamed picture pixels with `canvas.captureStream(10)` int
 
 Real iPhone/Android camera trials against paper and screens remain required. These changes do not establish that the previously reported iPhone camera failure is resolved.
 
+The live-camera update passed strict TypeScript, production web export, and sequential Android/iOS Hermes exports. The published prototype shows the new camera action; its worker, detector JS/WASM, and solver worker match the tested export byte-for-byte and return HTTP 200 with appropriate MIME types. Detector asset version: `9d98b12074473541`. Browser proof: `artifacts/published-live-picture-scan.jpg`.
+
 ## Photo import
 
 The picture importer reads six panels in 3×2 or 2×3 layouts, then requires face-name and orientation review. Recognition runs in the production browser WASM worker or the native detector on a separate worklet runtime. Native image decoding/cropping uses asynchronous Nitro Image operations; an explicit render applies iOS image orientation before cropping. Expo ImagePicker supplies the system selection UI ([official API documentation](https://docs.expo.dev/versions/latest/sdk/imagepicker/)).
@@ -53,11 +55,13 @@ The picture importer reads six panels in 3×2 or 2×3 layouts, then requires fac
 - Strict TypeScript, production web export, and sequential native Android/iOS Hermes exports passed after adding photo import. Exports do not establish native execution or signing.
 - Unit tests cover all four detector corner origins, arbitrary face label order and rotations, missing/unclear faces, duplicate names/centers, incorrect color counts, and impossible pieces. A solved picture enters camera verification instead of declaring the physical cube solved.
 - Manual picture steps are explicitly unverified. Switching to the camera uses the state after the turns the user marked complete; ambiguous or inconsistent observations follow existing recovery/rescan behavior.
-- Native photo import is implemented but has not been exercised on a physical Android phone or iPhone. Existing Android APKs predate the new picker dependency and need rebuilding. Neither screenshot imports nor synthetic fixtures resolve the reported iPhone live-camera failure above.
+- Native photo import is implemented and the photo-import Android build compiled successfully, but neither it nor the iPhone implementation has been exercised on a physical phone. The subsequent six-panel live-camera C++ change needs a newer native build. Neither screenshot imports nor synthetic fixtures resolve the reported iPhone live-camera failure above.
 
 ## Builds and access
 
 - HTTPS preview: https://point-scan-solve-10xdevv--prototype.expo.app
+- Immutable live-picture camera deployment: https://point-scan-solve-10xdevv--pmt7tl5pkm.expo.app (source commit `abe86eb`).
+- Live-picture Android development build: https://expo.dev/accounts/xuanyai/projects/point-scan-solve/builds/23607da4-caab-44b4-a413-d392975dcf35 (submitted; completion and runtime testing pending).
 - Immutable photo-import deployment: https://point-scan-solve-10xdevv--w3m8o1jwzl.expo.app (source commit `fbb0a0d`).
 - Photo-import Android development build: https://expo.dev/accounts/xuanyai/projects/point-scan-solve/builds/7deadbec-56ed-4150-ac1d-5cd52c21c758 (**finished successfully**; predates six-panel live camera detection).
 - Expo project: https://expo.dev/accounts/xuanyai/projects/point-scan-solve

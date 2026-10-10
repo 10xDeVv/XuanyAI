@@ -18,6 +18,12 @@ Every trial includes one deliberate incorrect quarter turn, whose identity and t
 
 For every settled turn, label the instant the layer stops moving and the instant the confirmation appears. Report nearest-rank p95 latency across all labeled settled turns; target ≤1,000 ms. Record false confirmations separately even if the solve later recovers. **Any false move confirmation or false solved declaration fails acceptance for that recording set.** A hidden/ambiguous turn must request a new angle, not guess.
 
+## Camera pointed at a picture
+
+On each phone/surface, test a known valid six-panel diagram printed on paper and displayed on another screen. Test both 3×2 and 2×3 arrangements, first with **Point camera at a picture**, then with the ordinary cube start action. Keep all panels visible and text upright. Record the actual camera frames, all 54 ground-truth colors, capture time, panel order, and review result. Include moderate tilt, glare, a covered panel, camera switch/background/resume, and a changed diagram during capture. Partial or unstable diagrams must not silently fill missing faces.
+
+Verify that a repeated center color is captured spatially but rejected by cube validation, and that a valid diagram yields a solution which solves the independently labeled state. Face names and rotations require review; automatic OCR is not implemented. A static diagram must never count as physical turn or solved-state evidence. These trials are separate from physical-cube acceptance and remain unmeasured.
+
 ## Failure handling
 
 - Deny camera access, then grant it and retry.

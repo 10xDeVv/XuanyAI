@@ -53,8 +53,8 @@ export class Session {
     if(this.view.stage==='scanning') {
       const diagram=this.diagram.observe(o);
       if(diagram.read){this.update({stage:'picture',picture:diagram.read,diagramCount:6,captured:[],poses:[],nextMove:undefined,message:'Picture captured. Check the six face names and colors.'});return;}
-      if(this.captureMode==='diagram'||o.faces.length>3){
-        this.scanner.reset();this.update({captured:[],diagramCount:diagram.count,message:diagram.columns?'Six panels found. Hold still for a moment.':`Picture scan: ${diagram.count}/6 clear grids. Show all six panels in 3 columns × 2 rows or 2 columns × 3 rows, with text upright.`});return;
+      if(this.captureMode==='diagram'||o.faces.length>3||o.largerGrid){
+        this.scanner.reset();this.update({captured:[],diagramCount:diagram.count,message:diagram.message??(diagram.layout?'Six panels found. Hold still for a moment.':`Picture scan: ${diagram.count}/6 clear grids. Show a complete unfolded net or six panels in two or three columns. Keep the top of the picture upright.`)});return;
       }
       this.update({diagramCount:undefined});
       const scan=this.scanner.observe(o);this.update({captured:scan.captured,message:scan.message});
@@ -63,7 +63,7 @@ export class Session {
     }
     if(this.view.stage==='planning')return;
     // A diagram is input for a plan, never evidence that physical turns happened.
-    if(o.faces.length>3){this.tracker.reset();this.verified.clear();this.verificationCounts.clear();this.update({poses:[],nextMove:undefined,message:'Bring your physical cube into view to verify turns. Use picture scanning to read a diagram.'});return;}
+    if(o.faces.length>3||o.largerGrid){this.tracker.reset();this.verified.clear();this.verificationCounts.clear();this.update({poses:[],nextMove:undefined,message:'Bring your physical 3 × 3 cube into view to verify turns. Use picture scanning to read a diagram.'});return;}
     const cube=this.view.cube;if(!cube)return;
     if(this.view.stage==='verifying') {
       if(gap>=800||o.quality!=='good'){this.verificationCounts.clear();this.verified.clear();this.tracker.reset();}

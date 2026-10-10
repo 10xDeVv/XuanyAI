@@ -13,7 +13,7 @@ function Button({label,onPress,secondary=false,disabled=false}:{label:string;onP
 }
 export function PhotoImport({onClose,onGuide,onScan,cameraRead,onRetake}:{onClose:()=>void;onGuide:(state:CubeState)=>void;onScan:()=>void;cameraRead?:PhotoRead;onRetake?:()=>void}){
   const [asset,setAsset]=useState<ImagePicker.ImagePickerAsset|null>(null),[layout,setLayout]=useState<PhotoLayout>(3);
-  const [read,setRead]=useState<PhotoRead|null>(cameraRead??null),[labels,setLabels]=useState([...PANEL_LABELS]),[turns,setTurns]=useState([0,0,0,0,0,0]);
+  const [read,setRead]=useState<PhotoRead|null>(cameraRead??null),[labels,setLabels]=useState([...(cameraRead?.labels??PANEL_LABELS)]),[turns,setTurns]=useState([0,0,0,0,0,0]);
   const [busy,setBusy]=useState(false),[picking,setPicking]=useState(false),[error,setError]=useState(''),[editing,setEditing]=useState<number|null>(null);
   const [solution,setSolution]=useState<{state:CubeState;moves:Move[]}|null>(null),[step,setStep]=useState(0);
   const request=useRef(0),controller=useRef<AbortController|null>(null),solver=useRef<SolverAdapter|null>(null),alive=useRef(true),uri=useRef('');
@@ -63,7 +63,7 @@ export function PhotoImport({onClose,onGuide,onScan,cameraRead,onRetake}:{onClos
       <Text style={s.kicker}>{solution?'YOUR NEXT TURN':cameraRead?'SIX PANELS CAPTURED':'FROM PICTURE TO PLAN'}</Text>
       <Text accessibilityRole="header" style={s.title}>{solution?'One turn at a time.':cameraRead?'Picture captured.':'Solve from a picture.'}</Text>
       {!solution&&<>
-        {cameraRead?<><Text style={s.body}>The camera read all six grids. Panels below follow your picture from left to right, then top to bottom. Check their names before solving.</Text><Button label="Scan picture again" secondary onPress={onRetake??onClose}/></>:<>
+        {cameraRead?<><Text style={s.body}>{cameraRead.layout==='net'?'Unfolded cube captured. Face names come from the layout: Up above Front, Left–Front–Right–Back across, and Down below Front. Check the colors and orientation before solving.':'The camera read all six grids. Panels below follow your picture from left to right, then top to bottom. Check their names before solving.'}</Text><Button label="Scan picture again" secondary onPress={onRetake??onClose}/></>:<>
         <Text style={s.body}>Choose a picture showing all six faces in separate, evenly spaced panels. We’ll read the colors on your device.</Text>
         <View style={s.section}><Text style={s.label}>PICTURE LAYOUT</Text><View style={s.row}>
           <Button label="3 across · 2 rows" secondary={layout!==3} disabled={busy||picking} onPress={()=>changeLayout(3)}/>

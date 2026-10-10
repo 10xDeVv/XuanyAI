@@ -14,7 +14,7 @@ namespace cubevision {
 using P=cv::Point2f;
 using Q=std::array<P,4>;
 struct Cell {Q q;P center;double area;};
-struct Face {Q q;std::array<int,9> colors;std::array<double,9> confidence;double sharpness,glare,score;};
+struct Face {Q q;std::array<int,9> colors;std::array<double,9> confidence;double sharpness,glare,score;int cells;};
 static const char* names[]={"white","red","green","yellow","orange","blue"};
 static P center(const Q&q) {return (q[0]+q[1]+q[2]+q[3])*0.25f;}
 static Q order(const std::vector<cv::Point>& points) {
@@ -119,10 +119,14 @@ std::string detect(const uint8_t* rgba,int width,int height,int stride) {
     if(!duplicate)cells.push_back({q,c,area});
   }
   std::sort(cells.begin(),cells.end(),[](const Cell&a,const Cell&b){return a.area>b.area;});
-  if(cells.size()>100)cells.resize(100);
+  // Retain enough regions to distinguish a 96-sticker 4x4 diagram from 3x3
+  // windows, while keeping work bounded on cluttered camera frames.
+  if(cells.size()>140)cells.resize(140);
   std::vector<Face> found;
   int gridCandidates=0;
+  bool largerGrid=false;
   const auto accept=[&](const std::vector<P>& src,const std::vector<P>& dst,double area){
+    if(largerGrid)return;
     auto h=fit(src,dst);if(h.empty())return;
     Q q={project(h,0,0),project(h,3,0),project(h,3,3),project(h,0,3)};
     for(auto p:q)if(!std::isfinite(p.x)||!std::isfinite(p.y)||p.x<1||p.y<1||p.x>=width-1||p.y>=height-1)return;
@@ -152,6 +156,21 @@ std::string detect(const uint8_t* rgba,int width,int height,int stride) {
       }
       if(best<.90)return;
     }
+    // A 4x4 face contains several convincing 3x3 windows. Require the whole
+    // adjacent 4x4 lattice before flagging it; do not feed a window to a 3x3 solver.
+    for(int dy:{-1,0})for(int dx:{-1,0}){
+      std::set<int> extra;
+      for(int row=0;row<4;row++)for(int col=0;col<4;col++){
+        const P target=project(h,float(col+dx)+.5f,float(row+dy)+.5f);
+        double best=std::sqrt(area)*.16;int chosen=-1;
+        for(size_t n=0;n<cells.size();n++){
+          const double ratio=cells[n].area/area;if(ratio<.55||ratio>1.8||extra.count(int(n)))continue;
+          const double d=cv::norm(target-cells[n].center);if(d<best){best=d;chosen=int(n);}
+        }
+        if(chosen>=0)extra.insert(chosen);
+      }
+      if(extra.size()==16){largerGrid=true;return;}
+    }
     gridCandidates++;
     // Neighbor pairs and grid rotations often describe exactly the same face.
     // Avoid repeatedly warping/sampling it on a phone's worker thread.
@@ -160,6 +179,7 @@ std::string detect(const uint8_t* rgba,int width,int height,int stride) {
       if(separation/4<1.5)return;
     }
     Face f;if(!sample(rgb,gray,q,f))return;
+    f.cells=int(src.size());
     f.score=src.size()-error+*std::min_element(f.confidence.begin(),f.confidence.end());
     auto duplicate=std::find_if(found.begin(),found.end(),[&](const Face&old){return cv::norm(center(old.q)-center(q))<cv::norm(q[0]-q[1])*.4;});
     if(duplicate==found.end())found.push_back(f);else if(f.score>duplicate->score)*duplicate=f;
@@ -169,6 +189,7 @@ std::string detect(const uint8_t* rgba,int width,int height,int stride) {
   // even when all nine centers are easy to locate. This route requires all nine
   // distinct regions and still passes the same geometry and color checks.
   for(const auto& seed:cells){
+    if(largerGrid)break;
     std::vector<std::pair<double,int>> neighbors;
     const double scale=std::sqrt(seed.area);
     for(size_t i=0;i<cells.size();i++){
@@ -196,6 +217,7 @@ std::string detect(const uint8_t* rgba,int width,int height,int stride) {
     }
   }
   for(const auto& seed:cells)for(float spacing:{1.10f,1.22f,1.36f})for(int slot=0;slot<9;slot++) {
+    if(largerGrid)continue;
     float col=float(slot%3),row=float(slot/3);
     Q local={P(col,row),P(col+1,row),P(col+1,row+1),P(col,row+1)},expanded;
     for(int i=0;i<4;i++)expanded[i]=seed.center+(seed.q[i]-seed.center)*spacing;
@@ -219,13 +241,16 @@ std::string detect(const uint8_t* rgba,int width,int height,int stride) {
   for(const auto& face:found){
     if(std::any_of(distinct.begin(),distinct.end(),[&](const Face& other){
       double edge=0;for(int i=0;i<4;i++)edge=std::max(edge,cv::norm(face.q[(i+1)%4]-face.q[i]));
-      return cv::norm(center(face.q)-center(other.q))<edge*.3;
+      std::vector<P> a(face.q.begin(),face.q.end()),b(other.q.begin(),other.q.end()),intersection;
+      const double overlap=cv::intersectConvexConvex(a,b,intersection),smaller=std::min(std::abs(cv::contourArea(a)),std::abs(cv::contourArea(b)));
+      return cv::norm(center(face.q)-center(other.q))<edge*.3 || (smaller>0&&overlap/smaller>.20);
     }))continue;
     // A live camera can see a printed/displayed six-face diagram as well as a
     // physical cube. Keep its spatially distinct panels, including equal centers.
     distinct.push_back(face);if(distinct.size()==6)break;
   }
   found=std::move(distinct);
+  if(largerGrid)found.clear();
   std::ostringstream out;out.precision(7);
   std::string quality=found.empty()?"missing":"good";
   if(!found.empty()&&std::all_of(found.begin(),found.end(),[](const Face&f){return f.sharpness<18;}))quality="blur";
@@ -236,9 +261,9 @@ std::string detect(const uint8_t* rgba,int width,int height,int stride) {
     for(int j=0;j<9;j++){if(j)out<<',';out<<'\"'<<names[f.colors[j]]<<'\"';}
     out<<"],\"confidence\":[";for(int j=0;j<9;j++){if(j)out<<',';out<<f.confidence[j];}
     out<<"],\"quad\":[";for(int j=0;j<4;j++){if(j)out<<',';out<<"{\"x\":"<<f.q[j].x<<",\"y\":"<<f.q[j].y<<'}';}
-    out<<"],\"sharpness\":"<<f.sharpness<<",\"glare\":"<<f.glare<<'}';
+    out<<"],\"sharpness\":"<<f.sharpness<<",\"glare\":"<<f.glare<<",\"cells\":"<<f.cells<<'}';
   }
-  out<<"],\"diagnostics\":{\"regions\":"<<cells.size()<<",\"grids\":"<<gridCandidates<<"},\"processingMs\":"<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count()<<'}';
+  out<<"],\"largerGrid\":"<<(largerGrid?"true":"false")<<",\"diagnostics\":{\"regions\":"<<cells.size()<<",\"grids\":"<<gridCandidates<<"},\"processingMs\":"<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count()<<'}';
   return out.str();
 }
 }

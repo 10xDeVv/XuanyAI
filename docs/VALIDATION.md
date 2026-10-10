@@ -8,7 +8,7 @@ Updated October 10, 2026 (America/Toronto). **Physical acceptance remains incomp
 | --- | --- | --- |
 | TypeScript | Pass | `tsc --noEmit`, strict project settings |
 | Expo configuration/dependencies | 21/21 pass | `artifacts/build-logs/expo-doctor.log` |
-| Automated tests | 36/36 pass | Vitest; includes rounded-sticker capture, covered-grid rejection, labeled picture assembly, live diagram settling and both six-panel layouts through production camera frame messages with compiled WASM |
+| Automated tests | 49/49 pass | Vitest; includes physical cube regressions, rectangular diagrams, unfolded-net geometry/labels, all six missing-face hints, cropped Back rejection, and larger-grid rejection through compiled WASM |
 | Cube model and solver | Pass | All 18 legal turns compared with cubejs, inverse/invariant tests, 20 randomized solutions applied and verified |
 | Capture and tracking | Pass on synthetic observations | Arbitrary views, adjacency/orientation assembly, invalid state reacquisition, layer-change invalidation, wrong turns, ambiguity, stale results, and fresh six-face completion. Completion rejects a hidden last-face turn and discards earlier checks after blur or a frame gap. |
 | Compiled detector integration | Pass on synthetic pixels | Production C++/OpenCV WASM detects all three faces in four differently oriented views, reconstructs a known scramble, and identifies correct and alternative settled turns |
@@ -43,6 +43,18 @@ A local browser test streamed picture pixels with `canvas.captureStream(10)` int
 Real iPhone/Android camera trials against paper and screens remain required. These changes do not establish that the previously reported iPhone camera failure is resolved.
 
 The live-camera update passed strict TypeScript, production web export, and sequential Android/iOS Hermes exports. The published prototype shows the new camera action; its worker, detector JS/WASM, and solver worker match the tested export byte-for-byte and return HTTP 200 with appropriate MIME types. Detector asset version: `9d98b12074473541`. Browser proof: `artifacts/published-live-picture-scan.jpg`.
+
+## Unfolded 3×3 nets
+
+The camera now recognizes the upright U / L F R B / D net. Planar grid geometry supplies the face labels; color identity is not used to guess net positions and OCR is not required. A confident five-face layout requests the missing named face, while all six complete grids are required to reach review. Other net topologies are not implemented.
+
+The user's cropped light-background screenshot initially produced a false sixth grid spanning neighboring faces. The detector now rejects overlapping grid candidates; the direct 640×605 test reads five complete faces and requests the full Back face. No missing Back colors are inferred. Browser resampling produces different incomplete-grid hints, as recorded below. The user's first screenshot contains 4×4 faces and now produces a larger-grid warning instead of 3×3 subgrids. The user confirmed the requested scope remains 3×3.
+
+Thirteen additional tests cover full and perspective nets, the exact known state and its verified solution, each missing face, incomplete-to-complete settling, larger-grid resets, light-colored panel backgrounds, a cropped Back face through production camera frame messages, eight-region extrapolation rejection, multiple unclear faces, and a generated 4×4 negative. Strict TypeScript and the complete 49-test suite passed. The two supplied screenshots were also run locally through the compiled detector and diagram scanner; originals remain private local test material. Physical paper/screen camera testing remains outstanding.
+
+Picture capture and review now require all nine independent sticker regions to support each face. The physical-cube detector's eight-region recovery fit is retained, but it cannot complete a diagram. Thin outlines around white squares can disappear at reduced camera resolution, so a visible face may still need reacquisition at a larger scale. This remains a recognition limitation, not an inferred successful capture.
+
+The browser MediaStream test captured a generated, known-valid net, assigned U/L/F/R/B/D correctly, validated all 54 colors, and generated 22 quarter-turn instructions (`artifacts/net-captured-review.jpg`, `artifacts/net-solution-camera.jpg`). The supplied cropped screenshot remained in scanning when streamed with padding at 640×480; the app requested clearer Front and Down grids because those faint white-square boundaries were incomplete at that scale (`artifacts/net-cropped-camera.jpg`). The direct 640×605 detector test requested Back instead. These differing requests demonstrate resolution sensitivity, not successful capture of the cropped example. Browser console reported no errors. Production web and both native Hermes exports passed; physical device camera testing is still pending.
 
 ## Photo import
 

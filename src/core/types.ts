@@ -20,6 +20,8 @@ export type ObservedFace = {
   quad: Quad;
   sharpness: number;
   glare: number;
+  /** Independent sticker regions supporting the grid fit, when supplied by vision. */
+  cells?: number;
 };
 export type CubeObservation = {
   timestamp: number;
@@ -28,6 +30,8 @@ export type CubeObservation = {
   quality: 'good' | 'blur' | 'glare' | 'missing' | 'occluded';
   processingMs: number;
   diagnostics?: { regions:number; grids:number };
+  /** A complete 4x4 lattice was found; never interpret its 3x3 subgrids as faces. */
+  largerGrid?: boolean;
 };
 export type CubeState = { facelets: string; centers: CenterMap; revision: number };
 export type FacePose = { face: Face; quad: Quad; rotations: number[] };

@@ -24,6 +24,8 @@ On each phone/surface, test a known valid six-panel diagram printed on paper and
 
 Verify that a repeated center color is captured spatially but rejected by cube validation, and that a valid diagram yields a solution which solves the independently labeled state. Face names and rotations require review; automatic OCR is not implemented. A static diagram must never count as physical turn or solved-state evidence. These trials are separate from physical-cube acceptance and remain unmeasured.
 
+Also test the upright unfolded net U / L F R B / D on paper and a screen. Check that geometry assigns the correct face names and orientations. Crop or cover each face in turn; a confident five-face layout should request that face and never proceed to a solution. Repeat the reported case with the rightmost Back column cut off. Bring the full Back face back into view and require a new stable capture. Point at a 4×4 net and check that the app requests a 3×3 diagram rather than capturing a 3×3 subgrid.
+
 ## Failure handling
 
 - Deny camera access, then grant it and retry.

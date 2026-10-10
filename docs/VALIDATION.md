@@ -8,7 +8,7 @@ Updated October 10, 2026 (America/Toronto). **Physical acceptance remains incomp
 | --- | --- | --- |
 | TypeScript | Pass | `tsc --noEmit`, strict project settings |
 | Expo configuration/dependencies | 21/21 pass | `artifacts/build-logs/expo-doctor.log` |
-| Automated tests | 51/51 pass | Vitest; includes physical cube regressions, rectangular diagrams, unfolded-net geometry/labels, all six missing-face hints, cropped Back rejection, larger-grid rejection, and portrait frame-resolution regression through compiled WASM |
+| Automated tests | 52/52 pass | Vitest; includes physical cube regressions, rectangular diagrams, separated and joined unfolded nets, missing-face hints, cropped Back rejection, larger-grid rejection, and portrait frame-resolution regression through compiled WASM |
 | Cube model and solver | Pass | All 18 legal turns compared with cubejs, inverse/invariant tests, 20 randomized solutions applied and verified |
 | Capture and tracking | Pass on synthetic observations | Arbitrary views, adjacency/orientation assembly, invalid state reacquisition, layer-change invalidation, wrong turns, ambiguity, stale results, and fresh six-face completion. Completion rejects a hidden last-face turn and discards earlier checks after blur or a frame gap. |
 | Compiled detector integration | Pass on synthetic pixels | Production C++/OpenCV WASM detects all three faces in four differently oriented views, reconstructs a known scramble, and identifies correct and alternative settled turns |
@@ -67,6 +67,18 @@ Picture mode now retains up to 1280 pixels on the long side without upscaling th
 With that correction, the same browser MediaStream reaches six clear panels, review, a valid 54-square state, and 22 verified solution steps (`artifacts/portrait-camera-after.jpg`). This is a controlled before/after browser test, not an iPhone camera recording. Two added tests exercise portrait pixel data through the production worker and verify both exact state capture and rejection after covering the Back column, plus retention of picture mode through partial frames. Strict TypeScript, all 51 automated tests, production web export, and sequential iOS/Android Hermes exports pass. Native picture mode disables the preview-sized-buffer option and uses stable resolution objects to avoid rebuilding frame output during every observation. Actual iPhone retesting, including latency from the larger frames, remains required. A distant diagram can still be too small; all six faces should fill most of the camera width.
 
 Published application bundle `entry-770f545a6ad911d89ff88e29ea14f64b.js` matches the tested export byte-for-byte. The worker, detector JS/WASM, and solver worker also match; their detector version remains `753713471457fab2` because this browser fix changes frame acquisition, not the detector. The fresh immutable URL was supplied for the user's iPhone retest; its result is pending.
+
+## Joined-face net correction
+
+The user reported a further 4/6 failure and supplied a black-background unfolded net with equal sticker spacing across face boundaries. The exact 757×567 image reproduced four clear grids, including windows displaced one column across the intended face boundaries. Merely retaining higher frame resolution did not resolve this grouping problem.
+
+The shared C++ detector now fits the entire joined net from 54 distinct observed sticker regions before selecting its six faces. It refines one common projective transform, checks residuals, rejects extra adjacent rows/columns, and samples each face only after the complete layout is established. Partial layouts fall back to the existing conservative grid path; no colors are inferred. The TypeScript arrangement check permits touching face boundaries and normalizes horizontal and vertical dimensions separately to handle perspective.
+
+The exact supplied image now yields six correctly grouped faces and a valid cube. All 54 colors match the independently transcribed example. The same state is captured at a 640-pixel image width and in six 720×1280 portrait variants (60%, 80%, and 95% coverage, each with and without 0.5-pixel Gaussian blur). Single desktop detector samples were approximately 32–81 ms after the change, versus 280–415 ms for the old incomplete grouping; these are not iPhone latency measurements. The original image remains local and is not published or committed.
+
+The added compiled-worker regression uses independently labeled colors from the example with generated geometry. It checks exact capture and a verified solve for straight/tilted and landscape/portrait versions, plus rejection of covered faces and a covered sticker. All 52 tests, strict TypeScript, and the existing compiled-detector pixel suite pass. Real iPhone camera behavior remains unverified for this patch.
+
+A local browser MediaStream streamed the exact supplied image at 80% width in a 720×1280 portrait frame through the production camera component, worker, Session, and review. It captured all six faces with the correct 54 colors and produced **32 verified quarter-turn steps**. No file picker was used, and the browser console reported no errors. Evidence: `artifacts/joined-net-camera-review.jpg` and `artifacts/joined-net-camera-solution.jpg`. Production web and sequential iOS/Android Hermes exports passed. The detector version is `821a256600d6f983`.
 
 ## Photo import
 

@@ -28,6 +28,8 @@ Also test the upright unfolded net U / L F R B / D on paper and a screen. Check 
 
 Repeat the complete test net in portrait and landscape phone orientations, with the sheet occupying roughly 60%, 80%, and 95% of the frame width. Record source and processed pixel dimensions and processing latency. The previous 640-pixel long-side limit erased white-square boundaries in portrait video. Picture frames now retain up to 1280 pixels; verify that all nine squares of every face remain independently visible. An auto-detected diagram must stay in picture mode through temporarily partial views, without switching back to lower-resolution cube scanning.
 
+Include a joined net with identical spacing between every sticker, including across face boundaries. Compare all 54 colors with ground truth; outlines must not shift one column into neighboring faces. Repeat with tilt, a covered square, a covered face, and additional rows/columns that do not form the supported net. The supplied black-background joined net previously detected only four incorrectly grouped windows and must now form the correct six faces.
+
 ## Failure handling
 
 - Deny camera access, then grant it and retry.

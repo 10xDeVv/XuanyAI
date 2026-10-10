@@ -78,6 +78,62 @@ static bool sample(const cv::Mat& rgb,const cv::Mat& gray,const Q&q,Face& face) 
   face.q=q;return face.sharpness>=8;
 }
 
+// Joined nets have the same spacing between stickers across face boundaries.
+// A greedy collection of local 3x3 windows cannot identify those boundaries.
+// Match the entire 54-region cross before choosing any of its six faces.
+static bool joinedNet(const cv::Mat& local,const std::vector<Cell>& cells,const cv::Mat& rgb,const cv::Mat& gray,std::vector<Face>& faces) {
+  if(cells.size()<54)return false;
+  const std::array<P,6> slots={P(1,0),P(0,1),P(1,1),P(2,1),P(3,1),P(1,2)};
+  const auto occupied=[](int x,int y){return (x>=0&&x<12&&y>=3&&y<6)||(x>=3&&x<6&&y>=0&&y<9);};
+  const auto nearest=[&](const cv::Mat& h,float x,float y,double tolerance){
+    const P p=project(h,x,y),u=project(h,x+1,y)-p,v=project(h,x,y+1)-p;
+    const double area=std::abs(u.x*v.y-u.y*v.x),step=std::sqrt(area);
+    if(!std::isfinite(step)||step<6)return -1;
+    int chosen=-1;double best=step*tolerance;
+    for(size_t i=0;i<cells.size();i++){
+      const double ratio=cells[i].area/area;if(ratio<.40||ratio>1.15)continue;
+      const double d=cv::norm(cells[i].center-p);if(d<best){best=d;chosen=int(i);}
+    }
+    return chosen;
+  };
+  for(const auto anchor:slots){
+    cv::Mat shift=cv::Mat::eye(3,3,CV_64F);shift.at<double>(0,2)=-anchor.x*3;shift.at<double>(1,2)=-anchor.y*3;
+    cv::Mat h=local*shift;std::vector<P> src,dst;std::set<int> used;
+    bool complete=true;
+    for(int y=0;y<9&&complete;y++)for(int x=0;x<12;x++)if(occupied(x,y)){
+      const int i=nearest(h,x+.5f,y+.5f,.30);
+      if(i<0||!used.insert(i).second){complete=false;break;}
+      src.push_back(P(x+.5f,y+.5f));dst.push_back(cells[i].center);
+    }
+    if(!complete||src.size()!=54)continue;
+    h=fit(src,dst);if(h.empty())continue;
+    double residual=0;bool aligned=true;
+    for(size_t k=0;k<src.size();k++){
+      const auto p=src[k];const double step=cv::norm(project(h,p.x+1,p.y)-project(h,p.x,p.y));
+      const double error=cv::norm(project(h,p.x,p.y)-dst[k])/step;
+      if(!std::isfinite(error)||error>.20){aligned=false;break;}residual+=error;
+    }
+    if(!aligned||residual/54>.08)continue;
+    // Reject subwindows of larger grids: the cross's immediate outer neighbors
+    // must be empty. Every accepted square still needs its own measured region.
+    int extra=0;
+    for(int y=-1;y<=9;y++)for(int x=-1;x<=12;x++)if(!occupied(x,y)&&
+      (occupied(x-1,y)||occupied(x+1,y)||occupied(x,y-1)||occupied(x,y+1))){
+      if(nearest(h,x+.5f,y+.5f,.20)>=0)extra++;
+    }
+    if(extra>1)continue;
+    std::vector<Face> result;
+    for(const auto s:slots){
+      const float x=s.x*3,y=s.y*3;
+      Q q={project(h,x,y),project(h,x+3,y),project(h,x+3,y+3),project(h,x,y+3)};
+      if(std::any_of(q.begin(),q.end(),[&](P p){return !std::isfinite(p.x)||!std::isfinite(p.y)||p.x<1||p.y<1||p.x>=rgb.cols-1||p.y>=rgb.rows-1;}))break;
+      Face f;if(!sample(rgb,gray,q,f))break;f.cells=9;f.score=20-residual/54;result.push_back(f);
+    }
+    if(result.size()==6){faces=std::move(result);return true;}
+  }
+  return false;
+}
+
 std::string detect(const uint8_t* rgba,int width,int height,int stride) {
   const auto begin=std::chrono::steady_clock::now();
   if(!rgba||width<32||height<32||width>1920||height>1920||stride<width*4)throw std::invalid_argument("Invalid frame dimensions");
@@ -125,8 +181,9 @@ std::string detect(const uint8_t* rgba,int width,int height,int stride) {
   std::vector<Face> found;
   int gridCandidates=0;
   bool largerGrid=false;
+  bool completeNet=false;
   const auto accept=[&](const std::vector<P>& src,const std::vector<P>& dst,double area){
-    if(largerGrid)return;
+    if(largerGrid||completeNet)return;
     auto h=fit(src,dst);if(h.empty())return;
     Q q={project(h,0,0),project(h,3,0),project(h,3,3),project(h,0,3)};
     for(auto p:q)if(!std::isfinite(p.x)||!std::isfinite(p.y)||p.x<1||p.y<1||p.x>=width-1||p.y>=height-1)return;
@@ -156,6 +213,7 @@ std::string detect(const uint8_t* rgba,int width,int height,int stride) {
       }
       if(best<.90)return;
     }
+    if(src.size()==9&&joinedNet(h,cells,rgb,gray,found)){completeNet=true;gridCandidates+=6;return;}
     // A 4x4 face contains several convincing 3x3 windows. Require the whole
     // adjacent 4x4 lattice before flagging it; do not feed a window to a 3x3 solver.
     for(int dy:{-1,0})for(int dx:{-1,0}){
@@ -189,7 +247,7 @@ std::string detect(const uint8_t* rgba,int width,int height,int stride) {
   // even when all nine centers are easy to locate. This route requires all nine
   // distinct regions and still passes the same geometry and color checks.
   for(const auto& seed:cells){
-    if(largerGrid)break;
+    if(largerGrid||completeNet)break;
     std::vector<std::pair<double,int>> neighbors;
     const double scale=std::sqrt(seed.area);
     for(size_t i=0;i<cells.size();i++){
@@ -217,7 +275,7 @@ std::string detect(const uint8_t* rgba,int width,int height,int stride) {
     }
   }
   for(const auto& seed:cells)for(float spacing:{1.10f,1.22f,1.36f})for(int slot=0;slot<9;slot++) {
-    if(largerGrid)continue;
+    if(largerGrid||completeNet)continue;
     float col=float(slot%3),row=float(slot/3);
     Q local={P(col,row),P(col+1,row),P(col+1,row+1),P(col,row+1)},expanded;
     for(int i=0;i<4;i++)expanded[i]=seed.center+(seed.q[i]-seed.center)*spacing;

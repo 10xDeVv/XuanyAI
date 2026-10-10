@@ -23,11 +23,12 @@ function projectPanels(input:ObservedFace[]):Panel[]|null {
   const y=unit({x:mean(axes.map(a=>a.y.x)),y:mean(axes.map(a=>a.y.y))});
   const det=x.x*y.y-x.y*y.x;
   if(!Number.isFinite(det)||det<.65||axes.some(a=>dot(a.x,x)<.93||dot(a.y,y)<.93))return null;
-  const sizes=faces.map(f=>(distance(f.quad[0],f.quad[1])+distance(f.quad[0],f.quad[3]))/2),size=mean(sizes);
+  const widths=faces.map(f=>distance(f.quad[0],f.quad[1])),heights=faces.map(f=>distance(f.quad[0],f.quad[3]));
+  const sizes=widths.map((w,i)=>(w+heights[i]!)/2),width=mean(widths),height=mean(heights);
   if(Math.min(...sizes)<Math.max(...sizes)*.55)return null;
   return faces.map(face=>{
     const c=projectOnQuad(face.quad,.5,.5);
-    return {face,u:(c.x*y.y-c.y*y.x)/det/size,v:(x.x*c.y-x.y*c.x)/det/size};
+    return {face,u:(c.x*y.y-c.y*y.x)/det/width,v:(x.x*c.y-x.y*c.x)/det/height};
   });
 }
 
@@ -48,7 +49,8 @@ function fitNet(panels:Panel[]):(Arrangement&{missing?:Face;error:number})|null 
       return {slope,origin:mb-slope*ma};
     };
     const x=fit('x','u'),y=fit('y','v');
-    if([x.slope,y.slope].some(d=>d<1.02||d>2.3))continue;
+    // Joined nets have exactly one face-width between neighboring centers.
+    if([x.slope,y.slope].some(d=>d<.96||d>2.3))continue;
     const errors=ordered.map((p,i)=>Math.hypot(p.u-x.origin-x.slope*expected[i]!.x,p.v-y.origin-y.slope*expected[i]!.y));
     if(Math.max(...errors)>.23*Math.min(x.slope,y.slope))continue;
     fits.push({layout:'net',faces:ordered.map(p=>p.face),labels:expected.map(p=>p.label),error:mean(errors),...(absent>=0?{missing:NET[absent]!.label}:{})});

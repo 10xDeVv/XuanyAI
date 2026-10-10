@@ -16,6 +16,8 @@ Picture scanning preserves frames up to 1280 pixels on the long side; physical c
 
 After capture, check the displayed colors, face names, and rotations. In an unfolded net, geometry assigns Up, Left, Front, Right, Back, Down in reading order. Separate rectangular panels default to Up, Front, Right, Left, Down, Back. Text labels are not read automatically. A five-face net requests the missing face; no cropped squares are invented. A detected 4×4 grid receives an unsupported-size message instead of treating its 3×3 windows as a cube. Other cube sizes and other unfolded-net arrangements are outside this prototype.
 
+Joined nets, where the gap between faces is the same as the gap between stickers, are recognized as one 54-square cross before splitting into faces. Each square must have its own observed region; missing squares are not filled from neighboring faces. Extra rows/columns around that cross reject the joined-net fit.
+
 Invalid diagrams are recognized but cannot be solved: for example, two white centers are not a valid six-color cube. A picture supplies a starting state; physical turn verification requires bringing the real cube into view.
 
 The C++ detector changed, so native users need a new development build. Physical screen/paper camera tests on Android and iPhone remain outstanding; see the validation record.

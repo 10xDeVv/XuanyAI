@@ -7,6 +7,8 @@ export const FACE_NAMES: Record<Face,string> = {U:'Up',F:'Front',R:'Right',L:'Le
 export type PhotoPanel = {face:ObservedFace|null; issue?:string};
 export type PhotoRead = {panels:PhotoPanel[];processingMs:number;labels?:Face[];layout?:'panels'|'net'};
 export type PhotoValidation = {valid:true;state:CubeState} | {valid:false;reason:string};
+export const clearDiagramFace=(face:ObservedFace)=>
+  (face.cells===undefined||face.cells===9)&&face.confidence.every(c=>Number.isFinite(c)&&c>=(face.calibrated?.75:.65))&&face.glare<.22&&face.sharpness>=(face.calibrated?8:18);
 
 /** A detector's first corner can be any corner. Align diagrams with the image. */
 export function uprightFace(face:ObservedFace):ObservedFace {
@@ -18,7 +20,7 @@ export function reviewPanel(faces:ObservedFace[]):PhotoPanel {
   if(faces.length!==1)return {face:null,issue:faces.length?'More than one grid in this panel. Use a picture with one face per panel.':'No complete 3 × 3 grid found. Use a clearer, straight-on picture.'};
   const face=uprightFace(faces[0]!);
   if(face.cells!==undefined&&face.cells<9)return {face,issue:'Show all nine squares of this face. Its grid is incomplete or unclear.'};
-  if(face.confidence.some(c=>!Number.isFinite(c)||c<.65)||face.glare>=.22||face.sharpness<18)
+  if(!clearDiagramFace(face))
     return {face,issue:'Some squares are unclear. Use a sharper picture with even lighting.'};
   return {face};
 }

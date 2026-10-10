@@ -29,7 +29,7 @@ export async function readPhoto(uri:string,columns:PhotoLayout,signal:AbortSigna
       signal.addEventListener('abort',abort,{once:true});if(signal.aborted){abort();return;}
       scheduleOnRuntime(runtime,()=>{
         'worklet';
-        try{scheduleOnRN(finish,detector.detect(pixels.buffer,pixels.width,pixels.height,pixels.width*4,pixels.pixelFormat==='BGRA',0,false));}
+        try{scheduleOnRN(finish,detector.detect(pixels.buffer,pixels.width,pixels.height,pixels.width*4,pixels.pixelFormat==='BGRA',0,false,false));}
         catch(e){scheduleOnRN(finish,'',String(e));}
       });
     });

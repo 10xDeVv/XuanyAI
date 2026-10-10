@@ -109,6 +109,22 @@ A local browser MediaStream replay of the supplied joined-net image, at 720×128
 
 All 63 tests pass (the stability group was rerun after updating its expiration fixture for the new deadline), along with strict TypeScript, the production web export, and sequential iOS/Android Hermes exports. This correction changes shared JavaScript and the web interface; it does not change the C++ detector. Native development clients with the joined-net detector can load the updated JavaScript through Metro.
 
+## Screen-camera recovery after four failed iPhone screenshots
+
+The user supplied four iPhone screenshots of the capture-stability deployment showing 0/6, 4/6, 2/6, and 1/6. These are failed real-camera observations. Earlier direct-image and generated MediaStream successes did not establish reliable recognition of a screen through a phone camera.
+
+Local regression inputs extract the entire visible camera viewport from each screenshot, including its UI-covered bottom, at original size and at 2× bilinear scaling. Expected facelets are independently transcribed from the visible squares. The second screenshot's Back face is close to the edge, but its nine colors remain visible; it is a positive fixture. Separate cropped and covered-square fixtures test genuinely missing pixels. Original screenshots and extracted pixels remain outside Git and published assets.
+
+The picture-only detector now adds chromatic/adaptive edges, checks each recovered square's local boundaries, fits consistent face proposals to the whole coplanar net, and calibrates colors from six distinct observed centers. It tries bounded image scales and smoothing only when initial detection is incomplete. It never allocates colors to satisfy counts. Measured colors must satisfy counts, unique centers, and all cube invariants; four matching complete frames are still required. Physical cube tracking retains the baseline detector and its stricter sharpness thresholds. Web and native pass an explicit picture-mode flag; the native method signature change requires a new development binary.
+
+All eight screenshot replays (four originals, each at two sizes) capture the exact independently labeled 54-facelet state through the production picture worker. The new generated-pixel test forces the recovery path using small softened grids and a warm orange palette, then rejects an actually cropped edge, a covered corner square, and a 4×4 net. The full suite passes 73 tests with the local screenshot manifest enabled; strict TypeScript also passes. Without the private manifest, the 65 public tests remain reproducible from source and a compiled WASM detector.
+
+Browser camera replay of screenshot 2 exposed a separate deadline failure: complete matching detections taking 800–991 ms kept resetting progress because the observation-gap limit was 800 ms. Picture recovery now accepts results up to 2 seconds old, permits up to 2.5 seconds between matching observations, expires partial retention after 3 seconds, and caps a candidate at 10 seconds. Physical tracking keeps the 1-second frame deadline. A new regression verifies slow confirmations, expiration, and changed-state resets; the affected 14-test group and strict TypeScript pass after this correction (66 public tests now exist).
+
+The same browser MediaStream now advances `6:1 (1103 ms), 6:2 (837 ms), 6:3 (886 ms), captured`, displays all 54 correct colors and a valid cube, and generates 33 verified quarter-turn steps. Screenshot 1's dark net also reaches exact capture with matching-view progress 1, 2, 3, captured (207/107/106 ms for the first three frames). Both browser runs report no console errors. They use the real camera component, worker, Session, and review modal; no file picker is used. Evidence stays local in `artifacts/screen-camera-review.png`, `artifacts/screen-camera-solution.png`, `artifacts/screen-camera-trace.txt`, and `artifacts/dark-screen-camera-review.png`.
+
+These screenshot replays are diagnostic evidence, not continuous physical recordings or proof of the acceptance success/latency targets. New iPhone Safari/Chrome and native trials remain required, especially for motion, moiré, lighting changes, and processing speed.
+
 ## Builds and access
 
 - HTTPS preview: https://point-scan-solve-10xdevv--prototype.expo.app

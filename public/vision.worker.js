@@ -31,7 +31,9 @@ self.onmessage=async({data})=>{
     const bytes=new Uint8Array(data.buffer);
     if(bytes.length>capacity){if(ptr)engine._free(ptr);capacity=bytes.length;ptr=engine._malloc(capacity);if(!ptr)throw new Error('Not enough memory for camera processing.');}
     engine.HEAPU8.set(bytes,ptr);
-    const result=JSON.parse(engine.detectRGBA(ptr,data.width,data.height,data.width*4));
+    const started=performance.now();
+    const result=JSON.parse((data.picture?engine.detectPictureRGBA:engine.detectRGBA)(ptr,data.width,data.height,data.width*4));
+    result.processingMs=performance.now()-started;
     self.postMessage({type:'observation',id:data.id,timestamp:data.timestamp,...result});
   }catch(error){self.postMessage({type:'error',message:error instanceof Error?error.message:String(error)});}
 };

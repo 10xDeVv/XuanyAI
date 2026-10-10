@@ -22,12 +22,13 @@ export default function CameraSurface(props:CameraSurfaceProps){
   const key=`${props.facing}:${props.active}:${foreground}:${!!props.picture}`;
   if(epoch.current.key!==key)epoch.current={key,value:epoch.current.value+1};
   const currentEpoch=epoch.current.value;
+  const picture=!!props.picture;
   useEffect(()=>{
     if(props.active&&!hasPermission)void requestPermission().then(ok=>{if(!ok)callbacks.current.onError('Camera access is off. Enable it in Settings, then try again.');}).catch(e=>callbacks.current.onError(String(e)));
   },[props.active,hasPermission,requestPermission]);
   useEffect(()=>{const sub=AppState.addEventListener('change',s=>{callbacks.current.onSuspend();setForeground(s==='active');});return()=>sub.remove();},[]);
   const receive=useCallback((json:string,timestamp:number,requestEpoch:number)=>{
-    if(!mounted.current||requestEpoch!==epoch.current.value||!callbacks.current.active||AppState.currentState!=='active'||Date.now()-timestamp>1000)return;
+    if(!mounted.current||requestEpoch!==epoch.current.value||!callbacks.current.active||AppState.currentState!=='active'||Date.now()-timestamp>(callbacks.current.picture?2000:1000))return;
     const result=JSON.parse(json);
     callbacks.current.onObservation({...result,timestamp,transform:{frameWidth:result.width,frameHeight:result.height,previewWidth:layout.current.width,previewHeight:layout.current.height,rotation:0,mirrored:false,fit:'contain'}} as CubeObservation);
   },[]);
@@ -44,7 +45,7 @@ export default function CameraSurface(props:CameraSurfaceProps){
           const format=frame.pixelFormat;
           if(format!=='rgb-bgra-8-bit'&&format!=='rgb-rgba-8-bit')throw new Error('Unsupported camera pixel format: '+format);
           const rotation=frame.orientation==='right'?270:frame.orientation==='left'?90:frame.orientation==='down'?180:0;
-          const json=detector.detect(frame.getPixelBuffer(),frame.width,frame.height,frame.bytesPerRow,format==='rgb-bgra-8-bit',rotation,frame.isMirrored);
+          const json=detector.detect(frame.getPixelBuffer(),frame.width,frame.height,frame.bytesPerRow,format==='rgb-bgra-8-bit',rotation,frame.isMirrored,picture);
           scheduleOnRN(receive,json,capturedAt,currentEpoch);
         }catch(e){scheduleOnRN(fail,String(e),currentEpoch);}finally{frame.dispose();}
       });

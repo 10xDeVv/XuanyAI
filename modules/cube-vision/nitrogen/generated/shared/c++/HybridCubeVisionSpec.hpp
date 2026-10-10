@@ -49,7 +49,7 @@ namespace margelo::nitro::cubevision {
 
     public:
       // Methods
-      virtual std::string detect(const std::shared_ptr<ArrayBuffer>& buffer, double width, double height, double stride, bool bgra, double rotation, bool mirrored) = 0;
+      virtual std::string detect(const std::shared_ptr<ArrayBuffer>& buffer, double width, double height, double stride, bool bgra, double rotation, bool mirrored, bool picture) = 0;
 
     protected:
       // Hybrid Setup

@@ -20,8 +20,10 @@ export type ObservedFace = {
   quad: Quad;
   sharpness: number;
   glare: number;
-  /** Independent sticker regions supporting the grid fit, when supplied by vision. */
+  /** Squares supported by regions and local boundaries, when supplied by vision. */
   cells?: number;
+  /** Colors compared against six distinct center references in the same picture. */
+  calibrated?: boolean;
 };
 export type CubeObservation = {
   timestamp: number;
@@ -29,6 +31,8 @@ export type CubeObservation = {
   transform: PreviewTransform;
   quality: 'good' | 'blur' | 'glare' | 'missing' | 'occluded';
   processingMs: number;
+  /** Additional picture-only boundary recovery; requires whole-cube validation. */
+  enhanced?: boolean;
   diagnostics?: { regions:number; grids:number };
   /** A complete 4x4 lattice was found; never interpret its 3x3 subgrids as faces. */
   largerGrid?: boolean;

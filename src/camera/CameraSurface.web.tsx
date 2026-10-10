@@ -2,6 +2,7 @@ import React,{useEffect,useRef} from 'react';
 import { CameraSurfaceProps } from './types';
 import { CubeObservation } from '../core/types';
 import { reliableFace } from '../core/scanner';
+import { clearDiagramFace } from '../photo/model';
 import { VISION_VERSION } from './visionVersion';
 import { cameraFrameSize } from './frameSize';
 
@@ -51,9 +52,9 @@ export default function CameraSurface(props:CameraSurfaceProps){
           if(data.type==='observation'&&data.id===pending){
             busy=false;clearTimeout(watchdog);
             if(document.hidden||pendingEpoch!==frameEpoch)return;
-            if(performance.now()-data.timestamp>1000){callbacks.current.onStatus('Scanning is too slow. Try the back camera with a plain background.');return;}
+            if(performance.now()-data.timestamp>(callbacks.current.picture?2000:1000)){callbacks.current.onStatus('Scanning is too slow. Try the back camera with a plain background.');return;}
             const rect=element.getBoundingClientRect();
-            const count=data.faces.filter((f:CubeObservation['faces'][number])=>reliableFace(f)&&(data.faces.length<=3||f.cells===undefined||f.cells===9)).length;
+            const count=data.faces.filter((f:CubeObservation['faces'][number])=>data.faces.length>3?clearDiagramFace(f):reliableFace(f)).length;
             callbacks.current.onStatus(data.largerGrid?'Use a 3 × 3 cube diagram':callbacks.current.picture?'Checking the picture · Hold steady':count?`${count} clear face${count===1?'':'s'} in view · Hold still`:data.faces.length?'Grid found · Adjust the light':'Looking for a 3 × 3 face');
             callbacks.current.onObservation({...data,transform:{frameWidth:canvas.width,frameHeight:canvas.height,previewWidth:rect.width,previewHeight:rect.height,rotation:0,mirrored:false,fit:'contain'}} as CubeObservation);
           }
@@ -70,7 +71,7 @@ export default function CameraSurface(props:CameraSurfaceProps){
             const data=context.getImageData(0,0,width,height),id=++sequence;
             pending=id;pendingEpoch=frameEpoch;busy=true;
             watchdog=setTimeout(()=>fail('Camera processing stopped responding. Try again.'),10000);
-            worker!.postMessage({type:'frame',id,width,height,timestamp:performance.now(),buffer:data.data.buffer},[data.data.buffer]);
+            worker!.postMessage({type:'frame',id,width,height,picture:!!callbacks.current.picture,timestamp:performance.now(),buffer:data.data.buffer},[data.data.buffer]);
           }catch(error){busy=false;clearTimeout(watchdog);fail('Could not read camera frames. Restart the camera or try Safari.');}
         },100);
       }catch(error){

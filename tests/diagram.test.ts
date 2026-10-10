@@ -33,12 +33,11 @@ describe('live diagram capture',()=>{
     const read=scan.observe({...o,timestamp:450}).read!;
     expect(assemblePhoto(read.panels,PANEL_LABELS,[0,0,0,0,0,0])).toMatchObject({valid:true,state:{facelets:cube.facelets}});
   });
-  it('resets capture on occlusion, color changes, blur, camera movement and frame gaps',()=>{
+  it('resets capture on major occlusion, color changes, blur, camera movement and frame gaps',()=>{
     const base=diagramFrame();
     const mutations=[
-      {...base,faces:base.faces.slice(0,5)},
+      {...base,faces:base.faces.slice(0,3)},
       {...base,quality:'blur' as const},
-      {...base,faces:base.faces.map((f,i)=>i?f:{...f,confidence:f.confidence.map(()=>.4) as typeof f.confidence})},
       diagramFrame(3,state(applyMoves(cube.facelets,['U']))),
       {...base,faces:base.faces.map(f=>({...f,quad:f.quad.map(p=>({x:p.x+40,y:p.y})) as Quad}))},
     ];

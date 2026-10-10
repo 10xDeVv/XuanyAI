@@ -32,7 +32,7 @@ Independent exploratory photos from [rubiks-cube-tracker](https://github.com/dwa
 
 ## Live camera pointed at pictures
 
-The detector retains up to six spatially distinct grids from one live frame. A new diagram capture path orders coplanar panels in 3×2 or 2×3 arrangements and requires four clear, identical observations over at least 450 ms. Spatial stability, all 54 colors, frame continuity, and panel geometry must agree. Separate-panel lattices that skip sticker rows are rejected using cell-to-sticker size checks. Missing/blurred/changed/moving observations reset the pending capture.
+The detector retains up to six spatially distinct grids from one live frame. A new diagram capture path orders coplanar panels in 3×2 or 2×3 arrangements and requires four clear, identical observations over at least 450 ms. Spatial stability, all 54 colors, frame continuity, and panel geometry must agree. Separate-panel lattices that skip sticker rows are rejected using cell-to-sticker size checks. The initial implementation reset on every missing panel; the temporal stability correction below supersedes that behavior.
 
 The start screen's **Point camera at a picture** action selects the back camera; complete diagrams are also recognized during ordinary cube scanning. Capture opens review directly, without the file picker. Names and rotations require review because text labels are not read. The camera preview uses contain scaling with the same transformation for overlays. Six-panel observations cannot verify physical turns or completion.
 
@@ -94,6 +94,18 @@ The picture importer reads six panels in 3×2 or 2×3 layouts, then requires fac
 - Unit tests cover all four detector corner origins, arbitrary face label order and rotations, missing/unclear faces, duplicate names/centers, incorrect color counts, and impossible pieces. A solved picture enters camera verification instead of declaring the physical cube solved.
 - Manual picture steps are explicitly unverified. Switching to the camera uses the state after the turns the user marked complete; ambiguous or inconsistent observations follow existing recovery/rescan behavior.
 - Native photo import is implemented and the photo-import Android build compiled successfully, but neither it nor the iPhone implementation has been exercised on a physical phone. The subsequent six-panel live-camera C++ change needs a newer native build. Neither screenshot imports nor synthetic fixtures resolve the reported iPhone live-camera failure above.
+
+## Temporal stability correction
+
+The user reported repeated 6/6 → 5/6 oscillation. `DiagramScanner` discarded its entire candidate whenever a single face fell below confidence, making four consecutive complete detections necessary. The web camera footer independently displayed the instantaneous face count.
+
+Capture now preserves a complete candidate through brief four- or five-face observations only when every clear face uniquely matches its geometry and colors. Partial frames never add confirmations or fill missing squares. Four complete matching observations are still required, and the final observation must contain all 54 reliable squares. A visible color conflict, substantial movement, blur, larger grid, transform change, or major loss resets the candidate. Duplicate/out-of-order observations cannot count. Candidates expire after 1.5 seconds without a complete observation or five seconds in total; a gap of 800 ms in processed observations also resets them. The longer complete-view deadline allows alternating detections at two processed frames per second without an immediate reset.
+
+The interface shows matching-view progress after finding a complete picture, retaining that progress and instruction during compatible dropouts. It does not present remembered faces as currently clear. The web camera footer no longer changes its face count every frame in picture mode. Physical-cube scanning and turn-verification thresholds are unchanged.
+
+Regression coverage includes alternating 6/5 and 6/4 observations, low-confidence and eight-region faces, prolonged loss, changed visible and previously hidden colors, geometry/frame changes, repeated timestamps, session suspension, and slow processing. Pixel tests run the compiled detector against six covered-face sequences and a joined net whose orange hue repeatedly crosses the confidence threshold. These reproduce 6/5 oscillation and capture the exact known state only on the fourth complete view. Fully covered faces in a joined net can still break grid grouping and require reacquisition; this correction does not claim to resolve every detector failure.
+
+A local browser MediaStream replay of the supplied joined-net image, at 720×1280 with fluctuating orange confidence, produced the observed sequence `6:1, 5:1, 5:1, 5:1, 6:2, 6:3, 5:3, 5:3, 5:3, 5:3 → captured` (clear faces : matching views). All 54 review colors matched the source and the cube passed validation. Evidence: `artifacts/stability-camera-review.jpg` and `artifacts/stability-camera-trace.txt`. Browser console reported no errors. The original image and local replay harness are not published. Physical iPhone/Android camera acceptance remains pending.
 
 ## Builds and access
 

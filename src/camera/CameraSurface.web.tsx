@@ -54,7 +54,7 @@ export default function CameraSurface(props:CameraSurfaceProps){
             if(performance.now()-data.timestamp>1000){callbacks.current.onStatus('Scanning is too slow. Try the back camera with a plain background.');return;}
             const rect=element.getBoundingClientRect();
             const count=data.faces.filter((f:CubeObservation['faces'][number])=>reliableFace(f)&&(data.faces.length<=3||f.cells===undefined||f.cells===9)).length;
-            callbacks.current.onStatus(data.largerGrid?'Use a 3 × 3 cube diagram':count?`${count} clear face${count===1?'':'s'} in view · Hold still`:data.faces.length?'Grid found · Adjust the light':'Looking for a 3 × 3 face');
+            callbacks.current.onStatus(data.largerGrid?'Use a 3 × 3 cube diagram':callbacks.current.picture?'Checking the picture · Hold steady':count?`${count} clear face${count===1?'':'s'} in view · Hold still`:data.faces.length?'Grid found · Adjust the light':'Looking for a 3 × 3 face');
             callbacks.current.onObservation({...data,transform:{frameWidth:canvas.width,frameHeight:canvas.height,previewWidth:rect.width,previewHeight:rect.height,rotation:0,mirrored:false,fit:'contain'}} as CubeObservation);
           }
         };

@@ -11,7 +11,7 @@ export type SessionView={
   nextMove?:Move; poses:FacePose[]; observation?:CubeObservation;
   movesDone:number; movesRemaining:number; corrections:number;
   confirmedAt:number; startedAt:number; elapsedMs:number;
-  picture?:PhotoRead; diagramCount?:number;
+  picture?:PhotoRead; diagramCount?:number; diagramConfirmations?:number;
 };
 const initial=():SessionView=>({stage:'setup',message:'Your cube. One turn at a time.',captured:[],poses:[],movesDone:0,movesRemaining:0,corrections:0,confirmedAt:0,startedAt:0,elapsedMs:0});
 export class Session {
@@ -57,7 +57,7 @@ export class Session {
         // Keep picture resolution after discovering a sheet, even if a later
         // frame loses a few grids. Switching resolutions each frame loses detail.
         this.captureMode='diagram';
-        this.scanner.reset();this.update({captured:[],diagramCount:diagram.count,message:diagram.message??(diagram.layout?'Six panels found. Hold still for a moment.':`Picture scan: ${diagram.count}/6 clear grids. Show a complete unfolded net or six panels in two or three columns. Keep the top of the picture upright.`)});return;
+        this.scanner.reset();this.update({captured:[],diagramCount:diagram.count,diagramConfirmations:diagram.confirmations,message:diagram.message??'Show a complete unfolded net or six panels in two or three columns. Keep the top of the picture upright.'});return;
       }
       this.update({diagramCount:undefined});
       const scan=this.scanner.observe(o);this.update({captured:scan.captured,message:scan.message});

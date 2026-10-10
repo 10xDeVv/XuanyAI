@@ -79,31 +79,61 @@ export function arrangeDiagram(input:ObservedFace[]):Arrangement|null {
   return null;
 }
 
-export type DiagramResult={count:number;columns?:PhotoLayout;layout?:'panels'|'net';message?:string;read?:PhotoRead};
+export type DiagramResult={count:number;confirmations?:number;columns?:PhotoLayout;layout?:'panels'|'net';message?:string;read?:PhotoRead};
+const confirming='Picture found. Hold steady while we check all six faces.';
+const near=(face:ObservedFace,anchor:ObservedFace)=>face.quad.every((p,j)=>distance(p,anchor.quad[j]!)<distance(anchor.quad[0],anchor.quad[1])*.18);
+const sameColors=(face:ObservedFace,anchor:ObservedFace)=>face.colors.every((c,i)=>c===anchor.colors[i]);
+type Candidate={key:string;frame:string;since:number;lastComplete:number;count:number;arrangement:Arrangement};
+/** Partial views may preserve a complete candidate, but never add confirmation evidence. */
+function compatiblePartial(faces:ObservedFace[],candidate:Candidate):boolean {
+  if(faces.length<4||faces.length>5)return false;
+  const matched=new Set<number>();
+  for(const raw of faces){
+    const face=uprightFace(raw),matches=candidate.arrangement.faces.flatMap((anchor,i)=>near(face,anchor)?[i]:[]);
+    if(matches.length!==1||matched.has(matches[0]!)||!sameColors(face,candidate.arrangement.faces[matches[0]!]!))return false;
+    matched.add(matches[0]!);
+  }
+  return true;
+}
 export class DiagramScanner {
-  private pending?:{key:string;since:number;last:number;count:number;anchor:ObservedFace[]};
-  reset(){this.pending=undefined;}
+  private pending?:Candidate;
+  private lastObserved=-Infinity;
+  private lastResult:DiagramResult={count:0};
+  reset(){this.pending=undefined;this.lastObserved=-Infinity;this.lastResult={count:0};}
   observe(o:CubeObservation):DiagramResult {
-    if(o.largerGrid){this.reset();return {count:0,message:'This picture has more than 3 squares per side. Use a 3 × 3 cube diagram.'};}
+    if(o.timestamp<=this.lastObserved)return {...this.lastResult,read:undefined};
+    if(o.timestamp-this.lastObserved>=800)this.pending=undefined;
+    this.lastObserved=o.timestamp;
+    const result=this.observeFresh(o);this.lastResult=result;return result;
+  }
+  private observeFresh(o:CubeObservation):DiagramResult {
+    if(o.largerGrid){this.pending=undefined;return {count:0,message:'This picture has more than 3 squares per side. Use a 3 × 3 cube diagram.'};}
     const clear=o.faces.filter(clearFace);
     const count=clear.length,arranged=count===6?arrangeDiagram(clear):null;
+    const frame=`${o.transform.frameWidth}:${o.transform.frameHeight}:${o.transform.rotation}:${o.transform.mirrored}`;
+    const prior=this.pending;
+    // A held view cannot keep old evidence alive indefinitely. Only a fresh,
+    // complete frame can confirm a candidate or extend the dropout deadline.
+    if(prior&&(prior.frame!==frame||o.timestamp-prior.lastComplete>=1500||o.timestamp-prior.since>5000))this.pending=undefined;
     if(o.quality!=='good'||count!==6||!arranged){
+      const held=this.pending;
+      if(held&&o.quality==='good'&&compatiblePartial(clear,held))return {count,confirmations:held.count,columns:held.arrangement.columns,layout:held.arrangement.layout,message:confirming};
+      this.pending=undefined;
       const outlined=arrangeDiagram(o.faces);
       if(outlined?.layout==='net'){
         const unclear=outlined.faces.flatMap((f,i)=>clearFace(f)?[]:[FACE_NAMES[outlined.labels[i]!]]);
-        if(unclear.length){this.reset();return {count,layout:'net',message:`Unfolded cube found. Show ${unclear.join(' and ')} more clearly; all nine squares of each face must be visible.`};}
+        if(unclear.length)return {count,layout:'net',message:`Unfolded cube found. Show ${unclear.join(' and ')} more clearly; all nine squares of each face must be visible.`};
       }
-      this.reset();const panels=count===5?projectPanels(clear):null,partial=panels?fitNet(panels):null;
+      const panels=count===5?projectPanels(clear):null,partial=panels?fitNet(panels):null;
       return {count,...(partial?.missing?{layout:'net' as const,message:`Unfolded cube found. Show the whole ${FACE_NAMES[partial.missing]} face more clearly; all nine squares must be visible.`}:{})};
     }
-    const key=`${o.transform.frameWidth}:${o.transform.frameHeight}:${arranged.layout}:${arranged.columns}:`+arranged.faces.map(f=>f.colors.join(',')).join('|');
-    const prior=this.pending;
-    if(prior&&o.timestamp<=prior.last)return {count,columns:arranged.columns,layout:arranged.layout};
-    const steady=prior&&arranged.faces.every((f,i)=>f.quad.every((p,j)=>distance(p,prior.anchor[i]!.quad[j]!)<distance(f.quad[0],f.quad[1])*.18));
-    if(!prior||prior.key!==key||o.timestamp-prior.last>=800||!steady){
-      this.pending={key,since:o.timestamp,last:o.timestamp,count:1,anchor:arranged.faces};
-    }else{prior.last=o.timestamp;prior.count++;}
+    const key=`${frame}:${arranged.layout}:${arranged.columns}:`+arranged.faces.map(f=>f.colors.join(',')).join('|');
+    const candidate=this.pending;
+    const steady=candidate&&arranged.faces.every((f,i)=>near(f,candidate.arrangement.faces[i]!));
+    if(!candidate||candidate.key!==key||!steady){
+      this.pending={key,frame,since:o.timestamp,lastComplete:o.timestamp,count:1,arrangement:arranged};
+    }else{candidate.lastComplete=o.timestamp;candidate.count=Math.min(4,candidate.count+1);}
     const current=this.pending!;
-    return {count,columns:arranged.columns,layout:arranged.layout,...(current.count>=4&&o.timestamp-current.since>=450?{read:{panels:arranged.faces.map(f=>reviewPanel([f])),processingMs:o.processingMs,labels:arranged.labels,layout:arranged.layout}}:{})};
+    return {count,confirmations:current.count,message:confirming,columns:arranged.columns,layout:arranged.layout,...(current.count>=4&&o.timestamp-current.since>=450?{read:{panels:arranged.faces.map(f=>reviewPanel([f])),processingMs:o.processingMs,labels:arranged.labels,layout:arranged.layout}}:{})};
   }
 }

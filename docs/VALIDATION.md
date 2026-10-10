@@ -107,9 +107,12 @@ Regression coverage includes alternating 6/5 and 6/4 observations, low-confidenc
 
 A local browser MediaStream replay of the supplied joined-net image, at 720×1280 with fluctuating orange confidence, produced the observed sequence `6:1, 5:1, 5:1, 5:1, 6:2, 6:3, 5:3, 5:3, 5:3, 5:3 → captured` (clear faces : matching views). All 54 review colors matched the source and the cube passed validation. Evidence: `artifacts/stability-camera-review.jpg` and `artifacts/stability-camera-trace.txt`. Browser console reported no errors. The original image and local replay harness are not published. Physical iPhone/Android camera acceptance remains pending.
 
+All 63 tests pass (the stability group was rerun after updating its expiration fixture for the new deadline), along with strict TypeScript, the production web export, and sequential iOS/Android Hermes exports. This correction changes shared JavaScript and the web interface; it does not change the C++ detector. Native development clients with the joined-net detector can load the updated JavaScript through Metro.
+
 ## Builds and access
 
 - HTTPS preview: https://point-scan-solve-10xdevv--prototype.expo.app
+- Immutable capture-stability correction: https://point-scan-solve-10xdevv--8owurkn8o3.expo.app (source commit `247b8a2`).
 - Immutable joined-net correction: https://point-scan-solve-10xdevv--hfh248gc94.expo.app (source commit `cbe4583`).
 - Joined-net Android development build: https://expo.dev/accounts/xuanyai/projects/point-scan-solve/builds/82046d8c-c5e1-4c56-b514-41d8fc80d7e1 (submitted; completion and runtime testing pending).
 - Immutable portrait-camera correction: https://point-scan-solve-10xdevv--8hi1su9chu.expo.app (source commit `3233ab1`).

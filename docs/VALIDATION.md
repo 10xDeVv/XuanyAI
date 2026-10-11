@@ -149,6 +149,7 @@ Known limitations remain: a generated ~90-pixel-wide cube with narrow seams yiel
 
 - HTTPS preview: https://point-scan-solve-10xdevv--prototype.expo.app
 - Immutable camera color/timing correction: https://point-scan-solve-10xdevv--9j1pb9lax6.expo.app (source `9bc6aeb`, detector `edf9e169743a5c96`). Published app, workers, and detector assets match the tested export byte-for-byte; published home screen loads without console errors.
+- Camera color/timing Android development build: https://expo.dev/accounts/xuanyai/projects/point-scan-solve/builds/ee0feb69-354d-42d8-a78e-f11cc78265e4 (submitted successfully; compilation and device testing pending).
 - Immutable screen-camera recovery: https://point-scan-solve-10xdevv--ovwfd9bzcd.expo.app (detector/source change `68024e1`).
 - Screen-camera Android development build: https://expo.dev/accounts/xuanyai/projects/point-scan-solve/builds/8f3b691e-288b-4044-9117-7a8ee11b2a89 (submitted; compilation and device testing pending).
 - Immutable capture-stability correction: https://point-scan-solve-10xdevv--8owurkn8o3.expo.app (source commit `247b8a2`).

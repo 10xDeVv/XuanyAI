@@ -82,7 +82,8 @@ export type DiagramResult={count:number;confirmations?:number;columns?:PhotoLayo
 const confirming='Picture found. Hold steady while we check all six faces.';
 const near=(face:ObservedFace,anchor:ObservedFace)=>face.quad.every((p,j)=>distance(p,anchor.quad[j]!)<distance(anchor.quad[0],anchor.quad[1])*.18);
 const sameColors=(face:ObservedFace,anchor:ObservedFace)=>face.colors.every((c,i)=>c===anchor.colors[i]);
-type Candidate={key:string;frame:string;since:number;lastComplete:number;count:number;arrangement:Arrangement;enhanced:boolean};
+type Candidate={key:string;frame:string;since:number;lastComplete:number;count:number;arrangement:Arrangement;enhanced:boolean;processingMs:number};
+const measuredWork=(...values:number[])=>Math.min(2000,Math.max(0,...values.map(n=>Number.isFinite(n)?n:0)));
 /** Partial views may preserve a complete candidate, but never add confirmation evidence. */
 function compatiblePartial(faces:ObservedFace[],candidate:Candidate):boolean {
   if(faces.length<4||faces.length>5)return false;
@@ -97,14 +98,17 @@ function compatiblePartial(faces:ObservedFace[],candidate:Candidate):boolean {
 export class DiagramScanner {
   private pending?:Candidate;
   private lastObserved=-Infinity;
+  private lastProcessingMs=0;
   private lastResult:DiagramResult={count:0};
-  reset(){this.pending=undefined;this.lastObserved=-Infinity;this.lastResult={count:0};}
+  reset(){this.pending=undefined;this.lastObserved=-Infinity;this.lastProcessingMs=0;this.lastResult={count:0};}
   observe(o:CubeObservation):DiagramResult {
     if(o.timestamp<=this.lastObserved)return {...this.lastResult,read:undefined};
-    // Recovery performs bounded extra image passes. Its complete, identical
-    // pictures can arrive slower than physical tracking frames.
-    if(o.timestamp-this.lastObserved>=(o.enhanced||this.pending?.enhanced?2500:800))this.pending=undefined;
-    this.lastObserved=o.timestamp;
+    // Even the first detector pass can take nearly two seconds on a phone.
+    // Match the accepted camera cadence without keeping stale frames forever.
+    const work=measuredWork(o.processingMs,this.lastProcessingMs);
+    const gap=o.enhanced||this.pending?.enhanced?2500:Math.max(800,work+200);
+    if(o.timestamp-this.lastObserved>=gap)this.pending=undefined;
+    this.lastObserved=o.timestamp;this.lastProcessingMs=o.processingMs;
     const result=this.observeFresh(o);this.lastResult=result;return result;
   }
   private observeFresh(o:CubeObservation):DiagramResult {
@@ -123,7 +127,10 @@ export class DiagramScanner {
     // A held view cannot keep old evidence alive indefinitely. Only a fresh,
     // complete frame can confirm a candidate or extend the dropout deadline.
     const recovering=o.enhanced||prior?.enhanced;
-    if(prior&&(prior.frame!==frame||o.timestamp-prior.lastComplete>=(recovering?3000:1500)||o.timestamp-prior.since>(recovering?10000:5000)))this.pending=undefined;
+    const work=measuredWork(o.processingMs,prior?.processingMs??0);
+    const completeDeadline=recovering?3000:Math.max(1500,work*2+300);
+    const candidateDeadline=recovering?10000:Math.max(5000,work*6+1000);
+    if(prior&&(prior.frame!==frame||o.timestamp-prior.lastComplete>=completeDeadline||o.timestamp-prior.since>candidateDeadline))this.pending=undefined;
     if(o.quality!=='good'||count!==6||!arranged){
       const held=this.pending;
       if(held&&o.quality==='good'&&compatiblePartial(clear,held))return {count,confirmations:held.count,columns:held.arrangement.columns,layout:held.arrangement.layout,message:confirming};
@@ -140,8 +147,8 @@ export class DiagramScanner {
     const candidate=this.pending;
     const steady=candidate&&arranged.faces.every((f,i)=>near(f,candidate.arrangement.faces[i]!));
     if(!candidate||candidate.key!==key||!steady){
-      this.pending={key,frame,since:o.timestamp,lastComplete:o.timestamp,count:1,arrangement:arranged,enhanced:!!o.enhanced};
-    }else{candidate.lastComplete=o.timestamp;candidate.count=Math.min(4,candidate.count+1);candidate.enhanced ||= !!o.enhanced;}
+      this.pending={key,frame,since:o.timestamp,lastComplete:o.timestamp,count:1,arrangement:arranged,enhanced:!!o.enhanced,processingMs:o.processingMs};
+    }else{candidate.lastComplete=o.timestamp;candidate.count=Math.min(4,candidate.count+1);candidate.enhanced ||= !!o.enhanced;candidate.processingMs=o.processingMs;}
     const current=this.pending!;
     return {count,confirmations:current.count,message:confirming,columns:arranged.columns,layout:arranged.layout,...(current.count>=4&&o.timestamp-current.since>=450?{read:{panels:arranged.faces.map(f=>reviewPanel([f])),processingMs:o.processingMs,labels:arranged.labels,layout:arranged.layout}}:{})};
   }

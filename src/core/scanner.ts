@@ -1,6 +1,7 @@
 import { CubeColor, CubeObservation, CubeState, FACES, Face, FaceGrid, CenterMap, ObservedFace } from './types';
 import { edgeToward, rotateGrid, rotationsMatching, validateCube } from './cube';
 import { sharedEdge } from './geometry';
+import { physicalFrameGapMs } from './timing';
 
 type StoredFace={grid:FaceGrid<CubeColor>;quality:number};
 type EdgeConstraint={a:CubeColor;b:CubeColor;aEdges:number[];bEdges:number[]};
@@ -15,9 +16,9 @@ function permutations<T>(items:T[]):T[][] {
 
 export class CubeScanner {
   private faces=new Map<CubeColor,StoredFace>();
-  private pending=new Map<CubeColor,{signature:string;count:number;since:number;last:number}>();
+  private pending=new Map<CubeColor,{signature:string;count:number;since:number;last:number;processingMs:number}>();
   private edges:EdgeConstraint[]=[];
-  private pendingEdges=new Map<string,{count:number;since:number;last:number}>();
+  private pendingEdges=new Map<string,{count:number;since:number;last:number;processingMs:number}>();
   private reacquired=new Set<CubeColor>();
   private assemblyKey='';
   private assembledState:CubeState|undefined;
@@ -43,7 +44,7 @@ export class CubeScanner {
     for(const face of visible) {
       const center=face.colors[4],sig=signature(face.colors);
       const old=this.pending.get(center);
-      const p=old?.signature===sig&&o.timestamp-old.last<800?{...old,count:old.count+1,last:o.timestamp}:{signature:sig,count:1,since:o.timestamp,last:o.timestamp};
+      const p=old?.signature===sig&&o.timestamp-old.last<physicalFrameGapMs(o.processingMs,old.processingMs)?{...old,count:old.count+1,last:o.timestamp,processingMs:o.processingMs}:{signature:sig,count:1,since:o.timestamp,last:o.timestamp,processingMs:o.processingMs};
       this.pending.set(center,p);
       if(p.count<3 || o.timestamp-p.since<220) continue;
       const stored=this.faces.get(center);
@@ -65,7 +66,7 @@ export class CubeScanner {
       if(!aEdges.length || !bEdges.length) continue;
       const c={a:ca,b:cb,aEdges,bEdges};
       const key=JSON.stringify(c),old=this.pendingEdges.get(key);visibleEdges.add(key);
-      const p=old&&o.timestamp-old.last<800?{...old,count:old.count+1,last:o.timestamp}:{count:1,since:o.timestamp,last:o.timestamp};
+      const p=old&&o.timestamp-old.last<physicalFrameGapMs(o.processingMs,old.processingMs)?{...old,count:old.count+1,last:o.timestamp,processingMs:o.processingMs}:{count:1,since:o.timestamp,last:o.timestamp,processingMs:o.processingMs};
       this.pendingEdges.set(key,p);
       if(sa&&sb&&p.count>=3&&o.timestamp-p.since>=220&&!this.edges.some(e=>JSON.stringify(e)===key))this.edges.push(c);
     }

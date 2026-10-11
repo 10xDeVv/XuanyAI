@@ -54,6 +54,34 @@ describe('picture confirmation across detection dropouts',()=>{
     }
     expect(result!.read).toBeDefined();
   });
+  it('confirms slow baseline picture detections without treating normal processing as camera loss',()=>{
+    for(const processingMs of [800,1200,1900]){
+      const o={...full(),processingMs},step=processingMs+100,scan=new DiagramScanner();
+      for(let i=0;i<4;i++){
+        const result=scan.observe({...o,timestamp:i*step});
+        expect(result.confirmations).toBe(i+1);expect(!!result.read).toBe(i===3);
+      }
+      // A stale full result must still expire instead of adding confirmation.
+      const stale=scan.observe({...o,timestamp:3*step+processingMs+250});
+      expect(stale.confirmations).toBe(1);expect(stale.read).toBeUndefined();
+    }
+  });
+  it('bounds held slow picture evidence and rejects changed colors before capture',()=>{
+    const o={...full(),processingMs:1200},step=1300,scan=new DiagramScanner();
+    for(let i=0;i<7;i++){
+      const result=scan.observe({...i%2?partial(o):o,timestamp:i*step});
+      expect(result.confirmations).toBe(Math.floor(i/2)+1);expect(!!result.read).toBe(i===6);
+    }
+    // Partial views cannot extend the deadline from the most recent full view.
+    expect(scan.observe({...partial(o),timestamp:9100}).confirmations).toBeUndefined();
+    scan.reset();for(const timestamp of [15000,16300,17600])scan.observe({...o,timestamp});
+    expect(scan.observe({...partial(o),timestamp:18900}).confirmations).toBe(3);
+    expect(scan.observe({...partial(o),timestamp:20200}).confirmations).toBe(3);
+    expect(scan.observe({...partial(o),timestamp:21500}).confirmations).toBeUndefined();
+    scan.reset();scan.observe({...o,timestamp:0});scan.observe({...o,timestamp:step});
+    const changed=scan.observe({...recolor(o),timestamp:step*2});
+    expect(changed.confirmations).toBe(1);expect(changed.read).toBeUndefined();
+  });
   it('resets on a visible changed color, duplicate grid, substantial movement or frame transform change',()=>{
     const o=full(),p=partial(o);
     const changed=[

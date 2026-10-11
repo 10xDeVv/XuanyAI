@@ -8,7 +8,7 @@ Updated October 10, 2026 (America/Toronto). **Physical acceptance remains incomp
 | --- | --- | --- |
 | TypeScript | Pass | `tsc --noEmit`, strict project settings |
 | Expo configuration/dependencies | 21/21 pass | `artifacts/build-logs/expo-doctor.log` |
-| Automated tests | 52/52 pass | Vitest; includes physical cube regressions, rectangular diagrams, separated and joined unfolded nets, missing-face hints, cropped Back rejection, larger-grid rejection, and portrait frame-resolution regression through compiled WASM |
+| Automated tests | 106/106 pass | Final October 10 camera correction; 98 public tests plus eight private screenshot replays. Includes actual worker dispatch, camera color variation, capture cadence, cube invariants, solve verification, and wrong/obscured turn rejection. |
 | Cube model and solver | Pass | All 18 legal turns compared with cubejs, inverse/invariant tests, 20 randomized solutions applied and verified |
 | Capture and tracking | Pass on synthetic observations | Arbitrary views, adjacency/orientation assembly, invalid state reacquisition, layer-change invalidation, wrong turns, ambiguity, stale results, and fresh six-face completion. Completion rejects a hidden last-face turn and discards earlier checks after blur or a frame gap. |
 | Compiled detector integration | Pass on synthetic pixels | Production C++/OpenCV WASM detects all three faces in four differently oriented views, reconstructs a known scramble, and identifies correct and alternative settled turns |
@@ -126,6 +126,24 @@ The same browser MediaStream now advances `6:1 (1103 ms), 6:2 (837 ms), 6:3 (886
 These screenshot replays are diagnostic evidence, not continuous physical recordings or proof of the acceptance success/latency targets. New iPhone Safari/Chrome and native trials remain required, especially for motion, moiré, lighting changes, and processing speed.
 
 The final web and sequential iOS/Android Hermes exports pass. A local memory failure during the first concurrent tooling run was resolved by exporting sequentially with two Metro workers. The deployed app bundle, vision worker, detector JS/WASM, and solver worker match the tested export byte-for-byte and return HTTP 200 with the correct MIME types. Detector version: `60f617c8caf04dca`. The published home screen loads without browser console errors. Native exports do not establish native compilation or physical-camera success.
+
+## Camera color, geometry, and timing correction
+
+The user reported that both modes were still unusable on the previous preview. That report remains a failed real-device trial; passing the earlier screenshot replays did not close acceptance.
+
+Reproduced causes and changes:
+
+- A single extra grid candidate could latch physical scanning into picture mode and erase stored faces. Automatic mode changes now require two matching complete spatial diagrams. Explicit picture mode still starts immediately.
+- Physical frames accepted by the camera could arrive too slowly for the 800 ms capture/tracking deadline. Likewise, successful baseline picture detections could reset forever at 800–1900 ms; the previous timing fix covered only the enhanced picture path. Deadlines now account for measured processing, remain bounded, and still expire on actual loss or contradictory evidence.
+- Warm/cool camera white balance could reject white squares and trigger expensive repeated grid searches. Bright neutral evidence now permits a bounded color correction only when the reference has a material tint and agrees across pixels. Already-neutral inputs stay untouched. Duplicate lattice searches are skipped without merging orientations.
+- Physical faces now use chromatic boundaries as well as grayscale edges. Incomplete contour lattices require measured boundaries for all nine squares and are considered after complete grids. Measured sticker colors provide a physical palette only when all six references are present and separable; missing colors are never manufactured to satisfy counts. Physical sharpness, glare, and reliability cutoffs remain unchanged.
+- Native buffers now enforce the same 640-pixel physical / 1280-pixel picture limits as web, independent of negotiated camera output size.
+
+Final validation: strict TypeScript, all 106 tests, the production web export, and sequential iOS/Android Hermes exports pass. The eight original screenshot replays still capture their exact labeled states. A separate 20-case private replay set at 960×1280 varies exposure gradient, warm/cool channel gains, size, and ±5/10° rotation: 19 exact captures, zero incorrect captures. The remaining small, blurred, tilted light-background net is rejected. Final desktop samples in this set were 173–398 ms; these are neither phone measurements nor p95 confirmation latency. The previously failing warm dark-net variant had taken approximately 2.3 seconds before the correction.
+
+Browser MediaStream checks exercise CameraSurface, the actual worker, Session, solver, and UI without an image picker. Warm and cool screenshot variants reach exact six-face review; the warm case produces 32 validated quarter-turn steps. A generated 480×640 sequence with shifted-orange physical views captures the cube and reaches camera guidance with 30 turns remaining. No browser console errors were reported. Local evidence: `artifacts/warm-camera-calibration-review.png`, `artifacts/cool-camera-calibration-review.png`, and `artifacts/physical-calibration-guidance.png`. Original photos, derived private frames, and replay harnesses are excluded from source and deployment.
+
+Known limitations remain: a generated ~90-pixel-wide cube with narrow seams yields two of three visible faces; a larger targeted view is needed to complete capture. The adaptive physical palette requires all six colors in the current frame; near-solved views with fewer references still use fixed classification. Persisting calibration safely across camera/exposure changes is not implemented. There are still no independently recorded full physical solves or measured phone acceptance rates. Detector version: `edf9e169743a5c96`.
 
 ## Builds and access
 

@@ -35,13 +35,17 @@ describe.skipIf(!existsSync('public/vision/cube-vision.wasm'))('portrait camera 
     const o=portraitSource(),source=renderObservation(o,{rounded:.18,background:[240,245,249],border:[195,202,212]});
     const detect=async(picture:boolean,bytes=source)=>{
       const {width,height}=cameraFrameSize(720,1280,picture),buffer=cameraPixels(bytes,width,height).buffer;
-      await self.onmessage({data:{type:'frame',id:1,width,height,timestamp:0,buffer}});
+      await self.onmessage({data:{type:'frame',id:1,width,height,picture,timestamp:0,buffer}});
       const d=messages.pop();expect(d.type).toBe('observation');
       return {...o,...d,transform:{...o.transform,frameWidth:width,frameHeight:height}} as CubeObservation;
     };
     const scan=(d:CubeObservation)=>{const scanner=new DiagramScanner();let result;for(const timestamp of [0,150,300,450])result=scanner.observe({...d,timestamp});return result!;};
-    // The previous physical-cube frame size silently failed to capture this sheet.
-    expect(scan(await detect(false)).read).toBeUndefined();
+    // Picture mode preserves the source detail even when the detector can also
+    // recover this particular sheet at the smaller physical-cube resolution.
+    expect(cameraFrameSize(720,1280,false)).toEqual({width:360,height:640});
+    expect(cameraFrameSize(720,1280,true)).toEqual({width:720,height:1280});
+    const low=scan(await detect(false)).read;
+    if(low)expect(assemblePhoto(low.panels,low.labels!,[0,0,0,0,0,0])).toMatchObject({valid:true,state:{facelets:netCube.facelets}});
     const high=await detect(true),read=scan(high).read;expect(read).toBeDefined();
     expect(assemblePhoto(read!.panels,read!.labels!,[0,0,0,0,0,0])).toMatchObject({valid:true,state:{facelets:netCube.facelets}});
     // More resolution must not allow missing colors to be filled in.
@@ -51,11 +55,16 @@ describe.skipIf(!existsSync('public/vision/cube-vision.wasm'))('portrait camera 
   },30000);
 });
 
-it('keeps auto-detected picture mode through partial frames instead of reverting to cube resolution',()=>{
+it('requires matching complete views before latching picture mode, then keeps picture resolution through dropouts',()=>{
   const session=new Session({ready:async()=>{},solve:async s=>({revision:s.revision,moves:[]}),dispose(){}}),o=netFrame();
   session.start();session.observe(o);
+  expect(session.getSnapshot().diagramCount).toBeUndefined();
   session.observe({...o,timestamp:150,faces:o.faces.slice(0,2)});
-  expect(session.getSnapshot()).toMatchObject({stage:'scanning',diagramCount:2,captured:[]});
-  for(const timestamp of [300,450,600]){session.observe({...o,timestamp});expect(session.getSnapshot().stage).toBe('scanning');}
-  session.observe({...o,timestamp:750});expect(session.getSnapshot().stage).toBe('picture');session.dispose();
+  expect(session.getSnapshot().diagramCount).toBeUndefined();
+  for(const timestamp of [300,450])session.observe({...o,timestamp});
+  expect(session.getSnapshot()).toMatchObject({stage:'scanning',diagramCount:6,diagramConfirmations:2,captured:[]});
+  session.observe({...o,timestamp:600,faces:o.faces.slice(0,5)});
+  expect(session.getSnapshot()).toMatchObject({stage:'scanning',diagramCount:5,diagramConfirmations:2,captured:[]});
+  session.observe({...o,timestamp:750});expect(session.getSnapshot().stage).toBe('scanning');
+  session.observe({...o,timestamp:900});expect(session.getSnapshot().stage).toBe('picture');session.dispose();
 });

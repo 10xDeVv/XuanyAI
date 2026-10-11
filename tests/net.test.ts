@@ -53,9 +53,14 @@ describe('unfolded 3x3 net capture',()=>{
     const o=netFrame(),scan=new DiagramScanner();for(const timestamp of [0,150,300])scan.observe({...o,timestamp});
     const result=scan.observe({...o,timestamp:450,largerGrid:true});expect(result.read).toBeUndefined();expect(result.message).toContain('3 × 3');
     expect(scan.observe({...o,timestamp:600}).read).toBeUndefined();
-    const solver=adapter(),session=new Session(solver);session.start();
-    for(const timestamp of [0,150,300,450])session.observe({...o,timestamp,largerGrid:true});
-    expect(session.getSnapshot()).toMatchObject({stage:'scanning',diagramCount:0,captured:[]});expect(solver.solve).not.toHaveBeenCalled();session.dispose();
+    for(const mode of ['auto','diagram'] as const){
+      const solver=adapter(),session=new Session(solver);session.start(mode);
+      for(const timestamp of [0,150,300,450])session.observe({...o,timestamp,largerGrid:true});
+      expect(session.getSnapshot()).toMatchObject({stage:'scanning',captured:[],message:expect.stringContaining('3 × 3')});
+      // A larger grid must be rejected without changing a physical scan's mode.
+      expect(session.getSnapshot().diagramCount).toBe(mode==='diagram'?0:undefined);
+      expect(solver.solve).not.toHaveBeenCalled();session.dispose();
+    }
   });
 });
 

@@ -1,4 +1,6 @@
 #include "Detector.hpp"
+#include "ColorCalibration.hpp"
+#include "PhysicalPalette.hpp"
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <array>
@@ -77,6 +79,23 @@ static bool sample(const cv::Mat& rgb,const cv::Mat& gray,const Q&q,Face& face,b
   const int whites=std::count(face.colors.begin(),face.colors.end(),0);
   face.glare=std::max(0.,glaring/double(std::max(1,all))-whites/9.);
   face.q=q;return face.sharpness>=8;
+}
+
+static void calibratePhysical(std::vector<Face>& faces) {
+  if(faces.empty()||faces.size()>3)return;
+  std::vector<std::array<cv::Vec3b,81>> squares;
+  for(const auto& face:faces)for(const auto& patch:face.samples)squares.push_back(patch);
+  PhysicalPalette palette;
+  if(estimatePhysicalPalette(squares,palette)!=PhysicalPaletteEvidence::complete)return;
+  for(auto& face:faces)for(int k=0;k<9;k++){
+    std::array<int,6> counts{};std::array<double,6> confidence{};
+    for(const auto px:face.samples[k]){
+      double certainty=0;const int color=classifyPhysicalSample(px,palette,certainty);
+      counts[color]++;confidence[color]+=certainty;
+    }
+    const int color=int(std::max_element(counts.begin(),counts.end())-counts.begin());
+    face.colors[k]=color;face.confidence[k]=confidence[color]/81.;
+  }
 }
 
 static double hueDistance(double a,double b){const double d=std::abs(a-b);return std::min(d,360-d);}
@@ -288,18 +307,20 @@ static std::string detectPass(const uint8_t* rgba,int width,int height,int strid
   std::chrono::steady_clock::time_point begin,double scaleX=1,double scaleY=1) {
   if(!rgba||width<32||height<32||width>1920||height>1920||stride<width*4)throw std::invalid_argument("Invalid frame dimensions");
   cv::Mat input(height,width,CV_8UC4,const_cast<uint8_t*>(rgba),stride),rgb,gray,blur,edges;
-  cv::cvtColor(input,rgb,cv::COLOR_RGBA2RGB);cv::cvtColor(rgb,gray,cv::COLOR_RGB2GRAY);
+  cv::cvtColor(input,rgb,cv::COLOR_RGBA2RGB);
+  balanceNeutral(rgb);
+  cv::cvtColor(rgb,gray,cv::COLOR_RGB2GRAY);
   cv::GaussianBlur(gray,blur,{3,3},0.6);cv::Canny(blur,edges,35,95);
   std::vector<std::vector<cv::Point>> contours;cv::findContours(edges,contours,cv::RETR_LIST,cv::CHAIN_APPROX_SIMPLE);
   // Camera blur weakens grayscale seams, especially between red/green or
   // white/background. Retain chromatic edges and locally normalized outlines.
-  if(enhanced){
   cv::Mat smooth;cv::GaussianBlur(rgb,smooth,{3,3},.6);
   std::vector<cv::Mat> channels;cv::split(smooth,channels);
   cv::Mat chromatic=cv::Mat::zeros(height,width,CV_8UC1);
   for(const auto& channel:channels){cv::Mat e;cv::Canny(channel,e,12,36);cv::bitwise_or(chromatic,e,chromatic);}
   std::vector<std::vector<cv::Point>> additional;cv::findContours(chromatic,additional,cv::RETR_LIST,cv::CHAIN_APPROX_SIMPLE);
   contours.insert(contours.end(),additional.begin(),additional.end());
+  if(enhanced){
   for(int base:{11,31}){
     const int block=std::max(3,int(std::round(base*std::min(width,height)/320.))|1);
     cv::Mat local;cv::adaptiveThreshold(blur,local,255,cv::ADAPTIVE_THRESH_GAUSSIAN_C,cv::THRESH_BINARY,block,2);
@@ -348,9 +369,16 @@ static std::string detectPass(const uint8_t* rgba,int width,int height,int strid
   int gridCandidates=0;
   bool largerGrid=false;
   bool completeNet=false;
+  std::set<std::array<int,9>> checkedGrids;
+  struct PartialGrid {std::vector<P> src,dst;double area;};
+  std::vector<PartialGrid> partialGrids;
+  bool recoverPartial=false;
   const auto accept=[&](const std::vector<P>& src,const std::vector<P>& dst,double area){
     if(largerGrid||completeNet)return;
-    if(enhanced){
+    // Prefer complete measured lattices. A less constrained fit must never
+    // suppress a later nine-region fit through the duplicate/overlap checks.
+    if(!enhanced&&src.size()<9&&!recoverPartial){partialGrids.push_back({src,dst,area});return;}
+    if(enhanced||src.size()<9){
       // A two-row strip plus blank background is not a face. Recovered grids
       // must still have measured regions across every row and column.
       for(int k=0;k<3;k++)if(std::none_of(src.begin(),src.end(),[&](P p){return std::abs(p.x-k-.5)<.01;})||
@@ -365,9 +393,11 @@ static std::string detectPass(const uint8_t* rgba,int width,int height,int strid
     error/=src.size()*std::sqrt(area);if(error>.13)return;
     // A diagonal/sheared lattice can connect centers from two different faces.
     // Its cell axes must agree with the actual sticker edges, not only centers.
+    std::array<int,9> regionIds;regionIds.fill(-1);
     for(size_t i=0;i<src.size();i++){
       const auto cell=std::find_if(cells.begin(),cells.end(),[&](const Cell& c){return cv::norm(c.center-dst[i])<.01;});
       if(cell==cells.end())return;
+      regionIds[int(src[i].y)*3+int(src[i].x)]=int(cell-cells.begin());
       const float x=src[i].x,y=src[i].y;
       Q predicted={project(h,x-.5f,y-.5f),project(h,x+.5f,y-.5f),project(h,x+.5f,y+.5f),project(h,x-.5f,y+.5f)};
       double best=-1;
@@ -386,6 +416,10 @@ static std::string detectPass(const uint8_t* rgba,int width,int height,int strid
       }
       if(best<.90)return;
     }
+    // Many seed/neighbor combinations fit exactly the same observed lattice.
+    // Re-running full-net searches for those duplicates can exceed phone frame
+    // deadlines. Keep orientation in the key: an upright net must still be tried.
+    if(!checkedGrids.insert(regionIds).second)return;
     if((enhanced||src.size()==9)&&joinedNet(h,cells,rgb,gray,found,enhanced)){completeNet=true;gridCandidates+=6;return;}
     // A 4x4 face contains several convincing 3x3 windows. Require the whole
     // adjacent 4x4 lattice before flagging it; do not feed a window to a 3x3 solver.
@@ -409,8 +443,12 @@ static std::string detectPass(const uint8_t* rgba,int width,int height,int strid
       double separation=0;for(int k=0;k<4;k++)separation+=cv::norm(old.q[(k+rotation)%4]-q[k]);
       if(separation/4<1.5)return;
     }
+    // On stickerless cubes equal-colored neighbors can share a contour. A
+    // partial lattice is usable only when every square has measured boundaries.
+    const bool boundaries=(enhanced||src.size()<9)&&gridEdges(rgb,h);
+    if(!enhanced&&src.size()<9&&!boundaries)return;
     Face f;if(!sample(rgb,gray,q,f,enhanced))return;
-    f.cells=enhanced?(gridEdges(rgb,h)?9:std::min(8,int(src.size()))):int(src.size());
+    f.cells=(enhanced||src.size()<9)?(boundaries?9:std::min(8,int(src.size()))):int(src.size());
     f.score=(enhanced?2*f.cells+.15*src.size():src.size())-error+*std::min_element(f.confidence.begin(),f.confidence.end());
     auto duplicate=std::find_if(found.begin(),found.end(),[&](const Face&old){return cv::norm(center(old.q)-center(q))<cv::norm(q[0]-q[1])*.4;});
     if(duplicate==found.end())found.push_back(f);else if(f.score>duplicate->score)*duplicate=f;
@@ -441,10 +479,10 @@ static std::string detectPass(const uint8_t* rgba,int width,int height,int strid
           const double ratio=cells[n].area/seed.area;if(ratio<.3||ratio>3.3||used.count(int(n)))continue;
           double d=cv::norm(p-cells[n].center);if(d<best){best=d;chosen=int(n);}
         }
-        if(chosen<0){if(enhanced)continue;else break;}
+        if(chosen<0)continue;
         used.insert(chosen);src.push_back({float(k%3)+.5f,float(k/3)+.5f});dst.push_back(cells[chosen].center);
       }
-      if(src.size()>=(enhanced?5:9))accept(src,dst,seed.area);
+      if(src.size()>=(enhanced?5:7))accept(src,dst,seed.area);
     }
   }
   for(const auto& seed:cells)for(float spacing:{1.10f,1.22f,1.36f})for(int slot=0;slot<9;slot++) {
@@ -464,9 +502,11 @@ static std::string detectPass(const uint8_t* rgba,int width,int height,int strid
       }
       if(chosen>=0){used.insert(chosen);src.push_back({float(k%3)+.5f,float(k/3)+.5f});dst.push_back(cells[chosen].center);}
     }
-    if(src.size()<(enhanced?5:8))continue;
+    if(src.size()<(enhanced?5:7))continue;
     accept(src,dst,seed.area);
   }
+  recoverPartial=true;
+  for(const auto& grid:partialGrids)accept(grid.src,grid.dst,grid.area);
   std::sort(found.begin(),found.end(),[](const Face&a,const Face&b){return a.score>b.score;});
   std::vector<Face> distinct;
   for(const auto& face:found){
@@ -485,6 +525,7 @@ static std::string detectPass(const uint8_t* rgba,int width,int height,int strid
   found.erase(std::remove_if(found.begin(),found.end(),[](const Face& f){return f.cells<8;}),found.end());
   if(largerGrid)found.clear();
   if(enhanced)calibrateDiagram(found);
+  else calibratePhysical(found);
   ready=found.size()==6&&std::all_of(found.begin(),found.end(),[](const Face& f){return f.cells==9&&f.sharpness>=(f.calibrated?8:18)&&f.glare<.22&&*std::min_element(f.confidence.begin(),f.confidence.end())>=(f.calibrated?.75:.65);});
   std::ostringstream out;out.precision(7);
   std::string quality=found.empty()?"missing":"good";

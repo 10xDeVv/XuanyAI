@@ -4,6 +4,7 @@ import { SOLVED,validateCube } from '../core/cube';
 import { CubeObservation,CubeState,Move,FacePose,CubeColor,SolverAdapter,FACES,COLORS } from '../core/types';
 import {DiagramScanner} from '../photo/DiagramScanner';
 import {PhotoRead} from '../photo/model';
+import {physicalFrameGapMs} from '../core/timing';
 
 export type Stage='setup'|'scanning'|'picture'|'planning'|'guiding'|'recovering'|'verifying'|'solved'|'error';
 export type SessionView={
@@ -25,13 +26,14 @@ export class Session {
   private listeners=new Set<()=>void>();
   private lostSince:number|null=null;
   private verified=new Set<CubeColor>();
-  private verificationCounts=new Map<CubeColor,{count:number;since:number;last:number}>();
+  private verificationCounts=new Map<CubeColor,{count:number;since:number;last:number;processingMs:number}>();
   private lastObserved=-Infinity;
+  private lastProcessingMs=0;
   constructor(private solver:SolverAdapter){}
   subscribe=(listener:()=>void)=>{this.listeners.add(listener);return ()=>{this.listeners.delete(listener);};};
   getSnapshot=()=>this.view;
   private update(patch:Partial<SessionView>){this.view={...this.view,...patch};for(const listener of this.listeners)listener();}
-  start(mode:'auto'|'diagram'='auto'){this.captureMode=mode;this.epoch++;this.scanner.reset();this.diagram.reset();this.tracker.reset();this.queue=[];this.verified.clear();this.verificationCounts.clear();this.lastObserved=-Infinity;this.lostSince=null;this.view=initial();this.update({stage:'scanning',message:mode==='diagram'?'Point at a picture with all six panels. Keep the text upright and hold still.':'Rotate the whole cube slowly. Keep each layer in place.',startedAt:Date.now(),...(mode==='diagram'?{diagramCount:0}:{})});}
+  start(mode:'auto'|'diagram'='auto'){this.captureMode=mode;this.epoch++;this.scanner.reset();this.diagram.reset();this.tracker.reset();this.queue=[];this.verified.clear();this.verificationCounts.clear();this.lastObserved=-Infinity;this.lastProcessingMs=0;this.lostSince=null;this.view=initial();this.update({stage:'scanning',message:mode==='diagram'?'Point at a picture with all six panels. Keep the text upright and hold still.':'Rotate the whole cube slowly. Keep each layer in place.',startedAt:Date.now(),...(mode==='diagram'?{diagramCount:0}:{})});}
   rescan(){const {movesDone,corrections,startedAt}=this.view;this.start(this.captureMode);this.update({movesDone,corrections,startedAt});}
   startFromPhoto(cube:CubeState){
     const validity=validateCube(cube.facelets);
@@ -40,24 +42,30 @@ export class Session {
     this.start();this.update({captured:FACES.map(f=>cube.centers[f])});void this.plan(cube);
   }
   suspend(){
-    this.tracker.reset();this.verificationCounts.clear();this.verified.clear();this.lastObserved=-Infinity;
+    this.tracker.reset();this.verificationCounts.clear();this.verified.clear();this.lastObserved=-Infinity;this.lastProcessingMs=0;
     // The user may turn unseen layers while the camera is paused or the app is backgrounded.
     if(!['setup','error','solved'].includes(this.view.stage))this.rescan();
     else this.update({poses:[],nextMove:undefined});
   }
   cameraError(message:string){this.epoch++;this.update({stage:'error',message,poses:[],nextMove:undefined});}
   observe(o:CubeObservation){
-    if(o.timestamp<=this.lastObserved)return;const gap=o.timestamp-this.lastObserved;this.lastObserved=o.timestamp;
+    if(o.timestamp<=this.lastObserved)return;const gap=o.timestamp-this.lastObserved,previousProcessingMs=this.lastProcessingMs;this.lastObserved=o.timestamp;this.lastProcessingMs=o.processingMs;
     if(['setup','picture','solved','error'].includes(this.view.stage))return;
     this.update({observation:o});
     if(this.view.stage==='scanning') {
       const diagram=this.diagram.observe(o);
       if(diagram.read){this.update({stage:'picture',picture:diagram.read,diagramCount:6,captured:[],poses:[],nextMove:undefined,message:'Picture captured. Check the six face names and colors.'});return;}
-      if(this.captureMode==='diagram'||o.faces.length>3||o.largerGrid){
-        // Keep picture resolution after discovering a sheet, even if a later
-        // frame loses a few grids. Switching resolutions each frame loses detail.
+      // A false fourth grid in one camera frame must not erase a physical scan.
+      // DiagramScanner counts only matching, spatially arranged complete views.
+      if((diagram.confirmations??0)>=2)this.captureMode='diagram';
+      if(this.captureMode==='diagram'){
+        // Keep picture resolution after repeated evidence of a sheet, even if
+        // a later frame loses a few grids.
         this.captureMode='diagram';
         this.scanner.reset();this.update({captured:[],diagramCount:diagram.count,diagramConfirmations:diagram.confirmations,message:diagram.message??'Show a complete unfolded net or six panels in two or three columns. Keep the top of the picture upright.'});return;
+      }
+      if(o.faces.length>3||o.largerGrid){
+        this.update({message:o.largerGrid?'Use a 3 × 3 cube. Keep other grids outside the camera view.':'Extra grids are in view. Hold the cube against a plain background.'});return;
       }
       this.update({diagramCount:undefined});
       const scan=this.scanner.observe(o);this.update({captured:scan.captured,message:scan.message});
@@ -69,7 +77,7 @@ export class Session {
     if(o.faces.length>3||o.largerGrid){this.tracker.reset();this.verified.clear();this.verificationCounts.clear();this.update({poses:[],nextMove:undefined,message:'Bring your physical 3 × 3 cube into view to verify turns. Use picture scanning to read a diagram.'});return;}
     const cube=this.view.cube;if(!cube)return;
     if(this.view.stage==='verifying') {
-      if(gap>=800||o.quality!=='good'){this.verificationCounts.clear();this.verified.clear();this.tracker.reset();}
+      if(gap>=physicalFrameGapMs(o.processingMs,previousProcessingMs)||o.quality!=='good'){this.verificationCounts.clear();this.verified.clear();this.tracker.reset();}
       if(o.quality!=='good'){this.update({poses:[],message:'Keep two sides visible while we check the whole cube.'});return;}
       const poses=matchObservation(cube,o);
       if(!poses){if(o.faces.some(reliableFace))this.rescan();return;}
@@ -83,7 +91,7 @@ export class Session {
       for(const color of this.verificationCounts.keys())if(!poses.some(p=>cube.centers[p.face]===color))this.verificationCounts.delete(color);
       for(const pose of poses) {
         const color=cube.centers[pose.face],old=this.verificationCounts.get(color);
-        const current=old&&o.timestamp-old.last<800?{...old,count:old.count+1,last:o.timestamp}:{count:1,since:o.timestamp,last:o.timestamp};
+        const current=old&&o.timestamp-old.last<physicalFrameGapMs(o.processingMs,old.processingMs)?{...old,count:old.count+1,last:o.timestamp,processingMs:o.processingMs}:{count:1,since:o.timestamp,last:o.timestamp,processingMs:o.processingMs};
         this.verificationCounts.set(color,current);
         if(current.count>=3&&o.timestamp-current.since>=220)this.verified.add(color);
       }

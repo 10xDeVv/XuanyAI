@@ -2,6 +2,7 @@ import { CubeObservation, CubeState, Face, FacePose, FACES, TrackingResult, Move
 import { ALL_MOVES, edgeToward, rotationsMatching, stateAfter } from './cube';
 import { reliableFace } from './scanner';
 import { sharedEdge } from './geometry';
+import { physicalFrameGapMs } from './timing';
 
 export function matchObservation(state:CubeState,o:CubeObservation):FacePose[]|null {
   const visible=o.faces.filter(reliableFace);
@@ -28,7 +29,7 @@ export function matchObservation(state:CubeState,o:CubeObservation):FacePose[]|n
 }
 
 export class CubeTracker {
-  private pending:{key:string;since:number;count:number;last:number}|null=null;
+  private pending:{key:string;since:number;count:number;last:number;processingMs:number}|null=null;
   private timestamp=-Infinity;
   private candidates:{state:CubeState;move?:Move}[]=[];
   private revision=-1;
@@ -45,7 +46,7 @@ export class CubeTracker {
     const matches=this.candidates.map(c=>({...c,poses:matchObservation(c.state,o)})).filter(c=>c.poses);
     if(matches.length!==1) {this.pending=null;return empty(matches.length?'ambiguous':'lost',matches.length);}
     const match=matches[0]!,key=match.move??'none';
-    const p=this.pending?.key===key&&o.timestamp-this.pending.last<800?{...this.pending,count:this.pending.count+1,last:o.timestamp}:{key,count:1,since:o.timestamp,last:o.timestamp};
+    const p=this.pending?.key===key&&o.timestamp-this.pending.last<physicalFrameGapMs(o.processingMs,this.pending.processingMs)?{...this.pending,count:this.pending.count+1,last:o.timestamp,processingMs:o.processingMs}:{key,count:1,since:o.timestamp,last:o.timestamp,processingMs:o.processingMs};
     this.pending=p;
     if(p.count<3 || o.timestamp-p.since<220) return {status:'settling',poses:match.poses!,confidence:0.5,candidates:1};
     if(!match.move) return {status:'unchanged',poses:match.poses!,confidence:1,candidates:1};

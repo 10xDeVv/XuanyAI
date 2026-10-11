@@ -16,9 +16,10 @@ public:
     else if(rotation==180)cv::rotate(rgba,rgba,cv::ROTATE_180);
     else if(rotation==270)cv::rotate(rgba,rgba,cv::ROTATE_90_COUNTERCLOCKWISE);
     if(mirrored)cv::flip(rgba,rgba,1);
-    // Frame output selects 640 for physical tracking, 1280 for six-face pictures.
-    // Do not silently discard the picture resolution requested by the camera.
-    if(std::max(rgba.cols,rgba.rows)>1280){double scale=1280./std::max(rgba.cols,rgba.rows);cv::resize(rgba,rgba,{},scale,scale,cv::INTER_AREA);}
+    // Camera targetResolution is negotiated, not guaranteed. Bound the actual
+    // buffer here to keep the same processing budget as the browser pipeline.
+    const int maxDimension=picture?1280:640;
+    if(std::max(rgba.cols,rgba.rows)>maxDimension){double scale=double(maxDimension)/std::max(rgba.cols,rgba.rows);cv::resize(rgba,rgba,{},scale,scale,cv::INTER_AREA);}
     auto json=::cubevision::detect(rgba.data,rgba.cols,rgba.rows,int(rgba.step),picture);
     json.pop_back();return json+",\"width\":"+std::to_string(rgba.cols)+",\"height\":"+std::to_string(rgba.rows)+"}";
   }

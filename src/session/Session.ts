@@ -8,7 +8,7 @@ import {physicalFrameGapMs} from '../core/timing';
 
 export type Stage='setup'|'scanning'|'picture'|'planning'|'guiding'|'recovering'|'verifying'|'solved'|'error';
 export type SessionView={
-  stage:Stage; message:string; captured:CubeColor[]; cube?:CubeState;
+  stage:Stage; message:string; captured:CubeColor[]; rechecking?:CubeColor[]; cube?:CubeState;
   nextMove?:Move; poses:FacePose[]; observation?:CubeObservation;
   movesDone:number; movesRemaining:number; corrections:number;
   confirmedAt:number; startedAt:number; elapsedMs:number;
@@ -68,7 +68,7 @@ export class Session {
         this.update({message:o.largerGrid?'Use a 3 × 3 cube. Keep other grids outside the camera view.':'Extra grids are in view. Hold the cube against a plain background.'});return;
       }
       this.update({diagramCount:undefined});
-      const scan=this.scanner.observe(o);this.update({captured:scan.captured,message:scan.message});
+      const scan=this.scanner.observe(o);this.update({captured:scan.captured,rechecking:scan.rechecking,message:scan.message});
       if(scan.state)void this.plan(scan.state);
       return;
     }

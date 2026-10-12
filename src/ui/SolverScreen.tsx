@@ -10,6 +10,8 @@ import {CubeArt} from './CubeArt';
 import {GuidanceOverlay} from './GuidanceOverlay';
 import {PhotoImport} from './PhotoImport';
 import {CubeState} from '../core/types';
+import {CubePreview} from './CubePreview';
+import {useReadableMessage} from './useReadableMessage';
 
 const ink='#17271F',muted='#738077',lime='#D1F58A';
 function Mark(){return <View style={s.mark}>{Array.from({length:9},(_,i)=><View key={i} style={[s.markCell,i===2&&{opacity:.25}]}/>)}</View>;}
@@ -28,6 +30,7 @@ export default function SolverScreen(){
   const [confirmed,setConfirmed]=useState(false);
   const [saveFrameRequest,setSaveFrameRequest]=useState(0);
   const [photo,setPhoto]=useState(false);
+  const [modelMode,setModelMode]=useState(true);
   useEffect(()=>()=>sessionRef.current?.dispose(),[]);
   useEffect(()=>{if(!view.confirmedAt)return;setConfirmed(true);const timeout=setTimeout(()=>setConfirmed(false),850);return()=>clearTimeout(timeout);},[view.confirmedAt]);
   const start=(mode:'auto'|'diagram'='auto')=>{
@@ -51,11 +54,18 @@ export default function SolverScreen(){
   const diagram=view.diagramCount!==undefined;
   const checking=diagram&&view.diagramConfirmations!==undefined;
   const compact=!wide&&!setup&&!solved;
+  const modelAvailable=!!view.cube&&['guiding','recovering','verifying','solved'].includes(stage)&&!paused;
+  const showModel=modelAvailable&&modelMode;
   const target=view.nextMove?.[0] as Face|undefined;
   const targetVisible=target&&view.poses.some(p=>p.face===target);
   const hidden=stage==='guiding'&&target&&!targetVisible;
-  const message=localError??(hidden?'Rotate the whole cube to show this center.':view.message);
-  const phase=error?'Let’s try that again':setup?'Ready when you are':solved?'Every side. Solved.':stage==='scanning'?(diagram?'Point at the whole picture.':'Getting to know your cube'):stage==='planning'?'A little thinking…':stage==='recovering'?'Let’s get a clearer view':stage==='verifying'?'The finishing touch':hidden?'Bring the next face into view':'One turn closer.';
+  const textContext=`${error?'error':stage==='guiding'||stage==='recovering'?'solving':stage}:${view.cube?.revision??0}:${paused}:${diagram}`;
+  const instruction=useReadableMessage(JSON.stringify([
+    error?'Let’s try that again':setup?'Ready when you are':solved?'Every side. Solved.':stage==='scanning'?(diagram?'Point at the whole picture.':'Getting to know your cube'):stage==='planning'?'A little thinking…':stage==='recovering'?'Let’s get a clearer view':stage==='verifying'?'The finishing touch':hidden?'Bring the next face into view':'One turn closer.',
+    localError??(hidden?'Rotate the whole cube to show this center.':view.message)
+  ]),textContext);
+  const [phase,message]=JSON.parse(instruction) as [string,string];
+  const cameraStatus=useReadableMessage(status,`${active}:${facing}:${diagram}`);
   const minutes=Math.floor(view.elapsedMs/60000),seconds=Math.floor(view.elapsedMs/1000)%60;
   return <SafeAreaView style={s.page}>
     <ScrollView ref={scroll} contentContainerStyle={[s.shell,wide&&{paddingHorizontal:56},compact&&{paddingHorizontal:14}]}>
@@ -69,26 +79,28 @@ export default function SolverScreen(){
       </View>}
       <View style={[s.main,wide&&{flexDirection:'row'},compact&&{gap:0}]}>
         <View style={[s.viewerColumn,wide&&{flex:1.5}]}>
-          <View style={[s.viewer,{height:wide?490:compact?Math.max(230,Math.min(380,height*.42)):320}]}>
+          {modelAvailable&&<View style={s.previewTabs}>{[['3D guide',true],['Camera guide',false]].map(([label,model])=><Pressable key={String(label)} accessibilityRole="button" accessibilityState={{selected:modelMode===model}} onPress={()=>setModelMode(Boolean(model))} style={[s.previewTab,modelMode===model&&s.previewTabActive]}><Text style={s.previewTabText}>{label}</Text></Pressable>)}</View>}
+          <View style={[s.viewer,{height:wide?490:showModel?430:compact?Math.max(230,Math.min(380,height*.42)):320}]}>
             {active&&<CameraSurface active={active} facing={facing} picture={diagram&&stage==='scanning'} saveFrameRequest={saveFrameRequest} onObservation={observe} onError={onError} onStatus={setStatus} onSuspend={suspend}/>}
             {(!active||setup)&&<View style={s.illustration}><View style={s.orbit}/><View style={s.orbitInner}/><View style={{width:285,height:300}}><CubeArt/></View></View>}
-            {active&&!paused&&<GuidanceOverlay observation={view.observation} poses={view.poses} move={view.nextMove} panels={diagram}/>}
-            <View style={s.viewerTop}><View style={s.liveChip}><View style={[s.dot,{backgroundColor:active?lime:'#7A887E'}]}/><Text style={s.liveText}>{active?'LIVE GUIDE':solved?'NICE WORK':'CAMERA PREVIEW'}</Text></View><Text style={s.viewerTag}>3 × 3</Text></View>
+            {active&&!paused&&!showModel&&<GuidanceOverlay observation={view.observation} poses={view.poses} move={view.nextMove} panels={diagram}/>}
+            {showModel&&view.cube&&<View style={s.modelViewer}><CubePreview state={view.cube} move={stage==='guiding'?view.nextMove:undefined} compact autoPlay={active}/><Text style={s.modelNote}>{solved?'Every face has been checked.':stage==='recovering'?'Last confirmed state · Use Camera guide to line up your cube.':'Preview only · Your camera confirms each turn.'}</Text></View>}
+            {!showModel&&<View style={s.viewerTop}><View style={s.liveChip}><View style={[s.dot,{backgroundColor:active?lime:'#7A887E'}]}/><Text style={s.liveText}>{active?'LIVE GUIDE':solved?'NICE WORK':'CAMERA PREVIEW'}</Text></View><Text style={s.viewerTag}>3 × 3</Text></View>}
             {active&&stage==='scanning'&&!diagram&&<View pointerEvents="none" style={s.reticle}><View style={s.reticleCorner}/><View style={[s.reticleCorner,{right:0,transform:[{rotate:'90deg'}]}]}/><View style={[s.reticleCorner,{bottom:0,transform:[{rotate:'-90deg'}]}]}/><View style={[s.reticleCorner,{right:0,bottom:0,transform:[{rotate:'180deg'}]}]}/></View>}
             {confirmed&&active&&<View style={s.confirmation}><Text style={s.confirmText}>✓  Got it</Text></View>}
-            <View pointerEvents="none" style={s.viewerBottom}>
-              <Text style={s.viewerCaption}>{setup?'A little guidance goes a long way.':paused?'Take your time. We’ll be right here.':solved?'Look what you just did.':stage==='planning'?'Finding a way from here.':status}</Text>
+            {!showModel&&<View pointerEvents="none" style={s.viewerBottom}>
+              <Text style={s.viewerCaption}>{setup?'A little guidance goes a long way.':paused?'Take your time. We’ll be right here.':solved?'Look what you just did.':stage==='planning'?'Finding a way from here.':cameraStatus}</Text>
               <Text style={s.viewerSub}>{setup?'Your real cube. Your next turn.':active?(diagram?'Paper or screen · All six grids in view':'Keep the cube in view · Pause between turns'):'POINT. SCAN. SOLVE.'}</Text>
-            </View>
+            </View>}
           </View>
-          <View style={s.viewerToolbar}><View style={s.privacy}><Text style={{fontSize:14,color:muted}}>◈</Text><Text style={s.toolbarLabel}>{active?'Unmirrored view':'Camera starts only when you’re ready'}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Switch camera" style={s.switchButton} onPress={()=>{suspend();setFacing(f=>f==='front'?'back':'front');}}><Text style={s.switchText}>↻  {facing==='front'?'Front':'Back'} camera</Text></Pressable></View>
+          <View style={s.viewerToolbar}><View style={s.privacy}><Text style={{fontSize:14,color:muted}}>◈</Text><Text style={s.toolbarLabel}>{showModel?'Your scanned colors':active?'Unmirrored view':'Camera starts only when you’re ready'}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Switch camera" style={s.switchButton} onPress={()=>{suspend();setFacing(f=>f==='front'?'back':'front');}}><Text style={s.switchText}>↻  {facing==='front'?'Front':'Back'} camera</Text></Pressable></View>
         </View>
         <View style={[s.side,wide&&{flex:1},!wide&&{minHeight:0,marginBottom:20},compact&&{padding:16}]}>
           {!compact&&<View style={s.sideTop}><Text style={s.eyebrow}>{setup?'LET’S MAKE IT CLICK':solved?'THAT WAS ALL YOU':error?'CAMERA CHECK':`YOUR ${stage==='scanning'?'SCAN':'SOLVE'}`}</Text><View style={s.stepChip}><Text style={s.stepChipText}>{setup?'01':stage==='scanning'?'01':solved?'✓':'02'} / 03</Text></View></View>}
           <Text accessibilityRole="header" style={[s.panelTitle,compact&&{fontSize:22,lineHeight:27,marginTop:0}]}>{paused?'Paused. Take your time.':phase}</Text>
           <Text accessibilityLiveRegion="polite" style={[s.panelBody,compact&&{marginTop:6}]}>{error?message:setup?'Prop up your phone, grab your cube, and let’s untangle it together. We’ll show you exactly what to turn.':paused?'Resume when you’re ready. We’ll take a fresh look at your cube.':message}</Text>
           {hidden&&view.cube&&target&&<View style={s.reveal}><View style={[s.centerSwatch,{backgroundColor:COLOR_HEX[view.cube.centers[target]]}]}/><View><Text style={s.revealTitle}>Show this center</Text><Text style={s.revealBody}>Move the whole cube, keeping layers still.</Text></View></View>}
-          {(setup||stage==='scanning')&&<View style={[s.scanProgress,compact&&{marginTop:12,paddingTop:12}]}><View style={s.progressHeader}><Text style={s.progressLabel}>{diagram?(checking?'MATCHING VIEWS':'CLEAR PANELS IN VIEW'):'FACES CAPTURED'}</Text><Text style={s.progressCount}>{diagram?(view.diagramConfirmations??view.diagramCount):view.captured.length}<Text style={{color:'#A1A99D'}}> / {checking?4:6}</Text></Text></View>{diagram?<Text style={s.scanHint}>Keep all six faces in view. Brief dropouts won’t erase matching views.</Text>:<><View style={[s.faces,compact&&{marginTop:10}]}>{COLORS.map(c=><View key={c} accessibilityLabel={`${c} face ${view.captured.includes(c)?'captured':'not captured'}`} style={[s.faceDot,compact&&{width:25,height:25,borderRadius:6},{backgroundColor:COLOR_HEX[c],opacity:view.captured.includes(c)?1:.28}]}>{view.captured.includes(c)&&<Text style={s.faceCheck}>✓</Text>}</View>)}</View>{!compact&&<Text style={s.scanHint}>{setup?'We’ll pick these up as you rotate.':'Any order works. No need to tap.'}</Text>}</>}</View>}
+          {(setup||stage==='scanning')&&<View style={[s.scanProgress,compact&&{marginTop:12,paddingTop:12}]}><View style={s.progressHeader}><Text style={s.progressLabel}>{diagram?(checking?'MATCHING VIEWS':'CLEAR PANELS IN VIEW'):'FACES CAPTURED'}</Text><Text style={s.progressCount}>{diagram?(view.diagramConfirmations??view.diagramCount):view.captured.length}<Text style={{color:'#A1A99D'}}> / {checking?4:6}</Text></Text></View>{diagram?<Text style={s.scanHint}>Keep all six faces in view. Brief dropouts won’t erase matching views.</Text>:<><View style={[s.faces,compact&&{marginTop:10}]}>{COLORS.map(c=><View key={c} accessibilityLabel={`${c} face ${view.rechecking?.includes(c)?'needs a check':view.captured.includes(c)?'captured':'not captured'}`} style={[s.faceDot,compact&&{width:25,height:25,borderRadius:6},{backgroundColor:COLOR_HEX[c],opacity:view.captured.includes(c)?1:.28}]}>{view.captured.includes(c)&&<Text style={s.faceCheck}>{view.rechecking?.includes(c)?'?':'✓'}</Text>}</View>)}</View><Text style={s.scanHint}>{view.rechecking?.length?'Saved views are kept. A ? marks a face that needs another look.':setup?'We’ll pick these up as you rotate.':'Faces stay saved as you rotate. Keep the layers still.'}</Text></>}</View>}
           {stage==='planning'&&<View style={s.thinking}><ActivityIndicator color={ink}/><Text style={s.scanHint}>Working on your device</Text></View>}
           {!compact&&!setup&&!['scanning','error','planning'].includes(stage)&&<View style={s.stats}><View><Text style={s.statValue}>{solved?`${minutes}:${String(seconds).padStart(2,'0')}`:String(view.movesDone).padStart(2,'0')}</Text><Text style={s.statLabel}>{solved?'YOUR SOLVE TIME':'TURNS MADE'}</Text></View><View style={s.statDivider}/><View><Text style={s.statValue}>{solved?view.movesDone:view.movesRemaining}</Text><Text style={s.statLabel}>{solved?'TURNS TAKEN':'TURNS TO GO'}</Text></View></View>}
           <View style={{flex:1,minHeight:16}}/>
@@ -114,6 +126,7 @@ export default function SolverScreen(){
 }
 
 const s=StyleSheet.create({
+  previewTabs:{flexDirection:'row',gap:6,backgroundColor:'#E7EDDE',padding:4,borderRadius:12,marginBottom:10},previewTab:{flex:1,minHeight:40,alignItems:'center',justifyContent:'center',borderRadius:9},previewTabActive:{backgroundColor:'#D1F58A'},previewTabText:{fontSize:12,fontWeight:'600',color:ink},modelViewer:{position:'absolute',inset:0,backgroundColor:'#F0F3E9',padding:10,justifyContent:'center'},modelNote:{fontSize:10,lineHeight:16,textAlign:'center',color:'#62735B',paddingHorizontal:10},
   page:{flex:1,backgroundColor:'#F5F6F0'},shell:{width:'100%',maxWidth:1440,alignSelf:'center',paddingHorizontal:22,paddingBottom:24},
   nav:{height:88,flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderBottomWidth:1,borderColor:'#E0E5DA'},brand:{flexDirection:'row',alignItems:'center',gap:12},mark:{width:30,height:30,flexDirection:'row',flexWrap:'wrap',gap:3},markCell:{width:8,height:8,backgroundColor:ink,borderRadius:1.5},brandText:{fontSize:30,fontWeight:'800',letterSpacing:-1.6,color:ink},brandDivider:{height:20,width:1,backgroundColor:'#CDD5C8',marginHorizontal:4},brandDescriptor:{fontSize:9,fontWeight:'600',letterSpacing:1.5,color:muted},navLinks:{flexDirection:'row',alignItems:'center',gap:22},activeNav:{paddingVertical:10,borderBottomWidth:2,borderColor:ink},navText:{fontSize:12,fontWeight:'600',color:ink},helpButton:{flexDirection:'row',gap:8,paddingVertical:12},helpNav:{color:muted,fontSize:12},
   headingRow:{flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between',marginTop:42,marginBottom:32,gap:24},eyebrow:{fontSize:9,fontWeight:'700',letterSpacing:1.65,color:muted},title:{fontSize:48,lineHeight:53,fontWeight:'600',letterSpacing:-2,color:ink,marginTop:13},headingNote:{paddingBottom:5},noteText:{color:muted,fontSize:13,lineHeight:22},privacy:{flexDirection:'row',gap:7,alignItems:'center'},privacyText:{color:ink,fontSize:10,marginTop:13},dot:{width:6,height:6,borderRadius:3,backgroundColor:'#759C4D'},

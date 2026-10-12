@@ -49,12 +49,13 @@ describe('automatic scanning',()=>{
     for(const f of FACES)for(let n=0;n<3;n++){t+=150;result=scanner.observe(observation(s,[f],t));}
     expect(result!.captured).toHaveLength(6);expect(result!.state).toBeUndefined();
   });
-  it('invalidates a scan when layers change during capture',()=>{
+  it('quarantines conflicting views without erasing saved faces',()=>{
     const scanner=new CubeScanner(),s=state(applyMoves(SOLVED,scramble));
     for(let i=0;i<3;i++)scanner.observe(observation(s,['F'],i*150));
     const changed=state(moveFacelets(s.facelets,'U'));let result;
     for(let i=0;i<3;i++)result=scanner.observe(observation(changed,['F'],500+i*150));
-    expect(result!.invalidated).toBe(true);expect(result!.captured).toHaveLength(0);
+    expect(result!.state).toBeUndefined();expect(result!.captured).toHaveLength(1);
+    expect(result!.rechecking).toEqual([s.centers.F]);
   });
   it('requires fresh consecutive frames after a gap or obscured view',()=>{
     const scanner=new CubeScanner(),s=state(applyMoves(SOLVED,scramble));

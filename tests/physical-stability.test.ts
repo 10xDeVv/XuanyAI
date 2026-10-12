@@ -79,7 +79,8 @@ describe('physical capture cadence',()=>{
     const scanner=new CubeScanner();
     for(const timestamp of [0,900,1800])scanner.observe(slow(observation(physical,['F'],timestamp)));
     let result;for(const timestamp of [2700,3600,4500])result=scanner.observe(slow(observation(changed,['F'],timestamp)));
-    expect(result).toMatchObject({invalidated:true,captured:[]});
+    expect(result).toMatchObject({captured:[physical.centers.F],rechecking:[physical.centers.F]});
+    expect(result!.state).toBeUndefined();
   });
   it('confirms solved through fresh slow views, but expires earlier views across a true gap',async()=>{
     for(const expire of [false,true]){

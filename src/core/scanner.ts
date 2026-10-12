@@ -3,9 +3,9 @@ import { edgeToward, rotateGrid, rotationsMatching, validateCube } from './cube'
 import { sharedEdge } from './geometry';
 import { physicalFrameGapMs } from './timing';
 
-type StoredFace={grid:FaceGrid<CubeColor>;quality:number};
+type StoredFace={grid:FaceGrid<CubeColor>;quality:number;confirmedAt:number};
 type EdgeConstraint={a:CubeColor;b:CubeColor;aEdges:number[];bEdges:number[]};
-export type ScanProgress={captured:CubeColor[];message:string;state?:CubeState;invalidated?:boolean};
+export type ScanProgress={captured:CubeColor[];rechecking:CubeColor[];message:string;state?:CubeState;invalidated?:boolean};
 const signature=(g:readonly CubeColor[])=>[0,1,2,3].map(r=>rotateGrid(g,r).join(',')).sort()[0]!;
 const canonical=(g:FaceGrid<CubeColor>)=>[0,1,2,3].map(r=>rotateGrid(g,r)).sort((a,b)=>a.join(',').localeCompare(b.join(',')))[0]!;
 export const reliableFace=(f:ObservedFace)=>f.confidence.every(c=>c>=0.65)&&f.glare<0.22&&f.sharpness>=18;
@@ -20,18 +20,22 @@ export class CubeScanner {
   private edges:EdgeConstraint[]=[];
   private pendingEdges=new Map<string,{count:number;since:number;last:number;processingMs:number}>();
   private reacquired=new Set<CubeColor>();
+  private uncertain=new Set<CubeColor>();
+  private rechecking=new Set<CubeColor>();
+  private changedSince:number|undefined;
   private assemblyKey='';
   private assembledState:CubeState|undefined;
   private lastTimestamp=-Infinity;
   private revision=0;
-  reset() {this.faces.clear();this.pending.clear();this.edges=[];this.pendingEdges.clear();this.reacquired.clear();this.assemblyKey='';this.assembledState=undefined;this.lastTimestamp=-Infinity;this.revision++;}
+  reset() {this.faces.clear();this.pending.clear();this.edges=[];this.pendingEdges.clear();this.reacquired.clear();this.uncertain.clear();this.rechecking.clear();this.changedSince=undefined;this.assemblyKey='';this.assembledState=undefined;this.lastTimestamp=-Infinity;this.revision++;}
   observe(o:CubeObservation):ScanProgress {
-    const result=(message:string,extra:Partial<ScanProgress>={}):ScanProgress=>({captured:[...this.faces.keys()],message,...extra});
+    const result=(message:string,extra:Partial<ScanProgress>={}):ScanProgress=>({captured:[...this.faces.keys()],rechecking:[...new Set([...this.uncertain,...this.rechecking])],message,...extra});
     if(o.timestamp<=this.lastTimestamp) return result('Rotate the whole cube slowly.');
     this.lastTimestamp=o.timestamp;
     if(o.quality==='blur') {this.pending.clear();this.pendingEdges.clear();return result('Pause for a moment so I can see the squares.');}
     if(o.quality==='glare') {this.pending.clear();this.pendingEdges.clear();return result('Tilt the cube away from the light.');}
-    const visible=o.faces.filter(reliableFace);
+    // Duplicate center labels are color ambiguity, not two independent views.
+    const visible=o.faces.filter(f=>reliableFace(f)&&o.faces.filter(other=>other.colors[4]===f.colors[4]).length===1);
     for(const c of this.pending.keys())if(!visible.some(f=>f.colors[4]===c))this.pending.delete(c);
     if(!visible.length) {
       this.pendingEdges.clear();
@@ -46,15 +50,34 @@ export class CubeScanner {
       const old=this.pending.get(center);
       const p=old?.signature===sig&&o.timestamp-old.last<physicalFrameGapMs(o.processingMs,old.processingMs)?{...old,count:old.count+1,last:o.timestamp,processingMs:o.processingMs}:{signature:sig,count:1,since:o.timestamp,last:o.timestamp,processingMs:o.processingMs};
       this.pending.set(center,p);
-      if(p.count<3 || o.timestamp-p.since<220) continue;
       const stored=this.faces.get(center);
-      if(stored && !rotationsMatching(face.colors,stored.grid).length) {
-        // A layer twist can alter several previously captured faces. Start a coherent capture again.
-        this.reset(); this.lastTimestamp=o.timestamp; invalidated=true; break;
+      const matches=stored&&rotationsMatching(face.colors,stored.grid).length>0;
+      // Keep the saved view while checking a conflicting reading. Never solve
+      // through an unresolved conflict, even if that face leaves the camera.
+      if(stored&&!matches)this.uncertain.add(center);
+      if(p.count<3 || o.timestamp-p.since<220) continue;
+      if(stored&&!matches) {
+        // A short run of misclassified colors used to erase the entire scan.
+        // Require stronger evidence before replacing just this face. A real
+        // twist may affect other saved faces, so require fresh checks of those
+        // older views before assembling, without discarding their capture.
+        if(p.count<6||o.timestamp-p.since<900)continue;
+        // A later contradiction may be a second physical turn. Do not reuse
+        // checks that predate this pattern just because another check is open.
+        this.changedSince=Math.max(this.changedSince??-Infinity,p.since);
+        for(const [color,saved] of this.faces)if(color!==center&&saved.confirmedAt<this.changedSince)this.rechecking.add(color);
+        this.faces.set(center,{grid:canonical(face.colors),quality:Math.min(...face.confidence),confirmedAt:o.timestamp});
+        this.uncertain.delete(center);this.rechecking.delete(center);
+        this.edges=this.edges.filter(e=>e.a!==center&&e.b!==center);this.pendingEdges.clear();
+        this.assemblyKey='';this.assembledState=undefined;this.revision++;invalidated=true;
+      } else if(stored) {
+        stored.confirmedAt=o.timestamp;
+        this.uncertain.delete(center);
+        if(this.changedSince===undefined||p.since>=this.changedSince)this.rechecking.delete(center);
+      } else {
+        this.faces.set(center,{grid:canonical(face.colors),quality:Math.min(...face.confidence),confirmedAt:o.timestamp});
       }
-      if(!stored) this.faces.set(center,{grid:canonical(face.colors),quality:Math.min(...face.confidence)});
     }
-    if(invalidated) return result('The squares changed. Rotate the whole cube without twisting a layer.',{invalidated:true});
     const visibleEdges=new Set<string>();
     for(let i=0;i<visible.length;i++) for(let j=i+1;j<visible.length;j++) {
       const [a,b]=[visible[i]!,visible[j]!].sort((a,b)=>a.colors[4].localeCompare(b.colors[4])) as [ObservedFace,ObservedFace];
@@ -71,7 +94,10 @@ export class CubeScanner {
       if(sa&&sb&&p.count>=3&&o.timestamp-p.since>=220&&!this.edges.some(e=>JSON.stringify(e)===key))this.edges.push(c);
     }
     for(const key of this.pendingEdges.keys())if(!visibleEdges.has(key))this.pendingEdges.delete(key);
-    if(this.faces.size<6) return result(this.faces.size?`${this.faces.size} of 6 faces captured. Turn the whole cube a little, then pause with two sides visible.`:'Face found. Hold still for a moment to capture it.');
+    const check=[...this.uncertain,...this.rechecking][0];
+    if(check)return result(`Your saved faces are kept. Show the ${check} center and pause so I can check its colors.`,{invalidated});
+    this.changedSince=undefined;
+    if(this.faces.size<6) return result(this.faces.size?'Face saved. Turn the whole cube a little, then pause with two sides visible.':'Face found. Hold still for a moment to capture it.');
     const counts=new Map<CubeColor,number>();
     for(const f of this.faces.values())for(const c of f.grid)counts.set(c,(counts.get(c)??0)+1);
     if([...counts.values()].some(n=>n!==9)||counts.size!==6){
@@ -79,7 +105,7 @@ export class CubeScanner {
       // Reacquire the least confident face containing an overrepresented color.
       return result(this.reacquire([...this.faces].filter(([,f])=>f.grid.some(c=>(counts.get(c)??0)>9)).map(([c])=>c)));
     }
-    const key=JSON.stringify([[...this.faces],this.edges]);
+    const key=JSON.stringify([[...this.faces].map(([color,face])=>[color,face.grid]),this.edges]);
     if(key===this.assemblyKey)return this.assembledState?result('Cube captured.',{state:this.assembledState}):result('Tilt the cube to show two neighboring faces together.');
     this.assemblyKey=key;
     const assembled=this.assemble();
@@ -89,8 +115,10 @@ export class CubeScanner {
     return result('Tilt the cube to show two neighboring faces together.');
   }
   private reacquire(candidates:CubeColor[]):string {
-    const suspect=candidates.filter(c=>!this.reacquired.has(c)).sort((a,b)=>this.faces.get(a)!.quality-this.faces.get(b)!.quality)[0];
-    if(!suspect){this.reset();return 'The views still disagree. Let’s scan again in even light.';}
+    let available=candidates.filter(c=>!this.reacquired.has(c));
+    if(!available.length){this.reacquired.clear();available=candidates;}
+    const suspect=available.sort((a,b)=>this.faces.get(a)!.quality-this.faces.get(b)!.quality)[0];
+    if(!suspect)return 'Show two neighboring faces together so I can check the saved views.';
     this.reacquired.add(suspect);this.faces.delete(suspect);this.pending.delete(suspect);this.pendingEdges.clear();
     this.edges=this.edges.filter(e=>e.a!==suspect&&e.b!==suspect);this.assemblyKey='';this.assembledState=undefined;
     return `Show the ${suspect} center again. One view didn’t agree.`;

@@ -145,6 +145,18 @@ Browser MediaStream checks exercise CameraSurface, the actual worker, Session, s
 
 Known limitations remain: a generated ~90-pixel-wide cube with narrow seams yields two of three visible faces; a larger targeted view is needed to complete capture. The adaptive physical palette requires all six colors in the current frame; near-solved views with fewer references still use fixed classification. Persisting calibration safely across camera/exposure changes is not implemented. There are still no independently recorded full physical solves or measured phone acceptance rates. Detector version: `edf9e169743a5c96`.
 
+## 3D solution preview and retained physical capture
+
+The shared solver UI now renders the scanned cube as projected 3D cubies and stickers. Each highlighted layer follows the same coordinate basis as the cube engine; Before, After, Replay, and view controls do not advance or confirm a physical turn. Picture steps derive their state by applying exactly the preceding moves, including when navigating backward. Live guidance keeps the camera mounted and verifying beneath the 3D view, with a Camera guide toggle. Reduced-motion preferences disable automatic animation.
+
+The user reported physical capture dropping from five faces back to one, together with rapidly changing instructions. The scanner previously cleared every saved face after three matching conflicting readings. It now retains those views, quarantines uncertain readings, and blocks assembly until they are resolved. A replacement pattern requires six matching frames over at least 900 ms; earlier saved faces then require fresh checks to prevent mixing states after a real twist. A question mark identifies a saved face needing a check. Color-count reacquisition removes only one suspect face, including after exhausting the first pass; it no longer clears the entire scan. Explicit fresh scans and camera suspension still reset deliberately.
+
+Instruction presentation requires a candidate to persist for 650 ms and leaves each displayed hint readable for at least two seconds. This does not delay observations, validation, or move confirmation; new scan/solve contexts and errors bypass the text delay.
+
+Validation: all 133 tests passed, and the affected scan/core group passed again after final revalidation tightening; strict TypeScript passes. New tests cover all 18 move-animation endpoints, layer membership, scanned color mappings, exact forward/backward solution states, all target-face viewpoints, retained five-face progress across blur and short color errors, duplicate centers, real-twist revalidation, and instruction timing. Production web and sequential iOS/Android Hermes exports pass. Browser MediaStream replays still capture the screen picture and generated physical cube, enter the 3D guide, and keep the same running camera when toggling views. At 390 CSS pixels, the model, replay controls, and next-step controls are usable. Previous restores byte-identical rendered geometry; animated layer rotation was visually inspected. No browser console errors were observed. Screenshots remain local in `artifacts/3d-preview-motion.png` and `artifacts/3d-live-guide.png`.
+
+These are automated and replay checks, not a new physical iPhone trial. The user confirmed improvement on the previous deployment, then reported the partial-scan reset; the new retention behavior still needs their real-cube retest. No detector or native module changes were required; detector version remains `edf9e169743a5c96`.
+
 ## Builds and access
 
 - HTTPS preview: https://point-scan-solve-10xdevv--prototype.expo.app

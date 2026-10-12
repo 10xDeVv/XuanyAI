@@ -159,6 +159,16 @@ These are automated and replay checks, not a new physical iPhone trial. The user
 
 Published 3D/capture-retention build: https://point-scan-solve-10xdevv--tg3ns9hkti.expo.app (source `61987c2`). The application bundle and all camera/solver assets match the final local export byte-for-byte. The published home screen loads without browser console errors.
 
+## Freely draggable cube and explicit step navigation
+
+The user clarified that the solution must be an interactive cube with persistent step controls, rather than a camera-gated preview. Physical captures and picture captures now use the same solution player. Previous step, Replay turn, and Next step sit directly beneath the cube. Next animates the current turn and commits exactly one step; Previous animates its inverse; Replay returns to the current step without advancing. At the end, the model is labeled solved while physical confirmation remains a separate camera action.
+
+The cube supports continuous drag orbit, pinch/wheel zoom, and two-finger or Shift/right-button drag pan. Keyboard arrows, Shift+arrows, zoom buttons, Reset, and Show turn provide additional controls. Viewing angle and zoom survive step changes. The scene now uses a dark background, stronger sticker colors, and an outlined moving layer. Mobile layout keeps navigation adjacent to the scene. Native touch uses React Native's responder; browser gestures use pointer capture and scoped wheel handling. No dependencies were added.
+
+The 3D guide pauses camera tracking and releases the camera; missing camera frames or backgrounding cannot silently reset a manual solution. Switching to camera guidance starts from the currently selected model state. Camera-confirmed movement updates a new solution snapshot without mutating an earlier manual plan. Scanning and detector thresholds are unchanged.
+
+Validation: 138 tests pass, including new gesture-transform and manual/camera separation regressions; strict TypeScript passes. Browser replays reach the shared player from a generated physical cube and from the screen-picture recording. Direct mouse dragging changes projected geometry; reset restores it exactly. Pan, zoom, replay, forward and backward navigation were verified. A complete 33-turn picture solution reaches a uniformly solved model, with Previous still available; replay and forward/backward round trips preserve the exact expected state. The 390-pixel responsive layout and animated turn were inspected. No browser console errors were observed. Evidence remains local in `artifacts/interactive-cube-motion.png` and `artifacts/interactive-cube-complete.png`. This verifies browser interaction and replay behavior; physical iPhone/Android touch performance and native runtime gestures still need hardware testing.
+
 ## Builds and access
 
 - HTTPS preview: https://point-scan-solve-10xdevv--prototype.expo.app

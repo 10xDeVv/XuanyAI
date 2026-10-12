@@ -1,29 +1,27 @@
-import React,{useEffect,useMemo,useRef,useState} from 'react';
-import {ActivityIndicator,Image,Modal,Pressable,ScrollView,StyleSheet,Text,useWindowDimensions,View} from 'react-native';
+import React,{useEffect,useRef,useState} from 'react';
+import {ActivityIndicator,Image,Modal,Pressable,ScrollView,StyleSheet,Text,View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import {rotateGrid} from '../core/cube';
-import {stateAtStep} from '../core/cubePreview';
 import {COLOR_HEX,CubeState,Face,FACES,Move,SolverAdapter} from '../core/types';
 import {assemblePhoto,FACE_NAMES,PANEL_LABELS,PhotoLayout,PhotoRead} from '../photo/model';
 import {readPhoto} from '../photo/readPhoto';
 import {createSolver} from '../solver/createSolver';
-import {CubePreview} from './CubePreview';
+import {SolutionPlayer} from './SolutionPlayer';
 
 function Button({label,onPress,secondary=false,disabled=false}:{label:string;onPress:()=>void;secondary?:boolean;disabled?:boolean}){
   return <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={[s.button,secondary&&s.secondary,disabled&&{opacity:.45}]}><Text style={s.buttonText}>{label}</Text></Pressable>;
 }
 export function PhotoImport({onClose,onGuide,onScan,cameraRead,onRetake}:{onClose:()=>void;onGuide:(state:CubeState)=>void;onScan:()=>void;cameraRead?:PhotoRead;onRetake?:()=>void}){
-  const compact=useWindowDimensions().width<600;
   const [asset,setAsset]=useState<ImagePicker.ImagePickerAsset|null>(null),[layout,setLayout]=useState<PhotoLayout>(3);
   const [read,setRead]=useState<PhotoRead|null>(cameraRead??null),[labels,setLabels]=useState([...(cameraRead?.labels??PANEL_LABELS)]),[turns,setTurns]=useState([0,0,0,0,0,0]);
   const [busy,setBusy]=useState(false),[picking,setPicking]=useState(false),[error,setError]=useState(''),[editing,setEditing]=useState<number|null>(null);
-  const [solution,setSolution]=useState<{state:CubeState;moves:Move[]}|null>(null),[step,setStep]=useState(0);
+  const [solution,setSolution]=useState<{state:CubeState;moves:Move[]}|null>(null);
   const request=useRef(0),controller=useRef<AbortController|null>(null),solver=useRef<SolverAdapter|null>(null),alive=useRef(true),uri=useRef('');
   const scroll=useRef<ScrollView>(null);
   const release=(value:string)=>{if(value.startsWith('blob:')&&typeof URL!=='undefined')URL.revokeObjectURL(value);};
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;request.current++;controller.current?.abort();solver.current?.dispose();release(uri.current);};},[]);
-  const resetSolution=()=>{request.current++;solver.current?.dispose();solver.current=null;setSolution(null);setStep(0);};
+  const resetSolution=()=>{request.current++;solver.current?.dispose();solver.current=null;setSolution(null);};
   const analyze=async(next:ImagePicker.ImagePickerAsset,columns:PhotoLayout)=>{
     resetSolution();controller.current?.abort();const abort=new AbortController();controller.current=abort;
     const id=request.current;setBusy(true);setError('');setRead(null);setEditing(null);setTurns([0,0,0,0,0,0]);setLabels([...PANEL_LABELS]);
@@ -51,21 +49,18 @@ export function PhotoImport({onClose,onGuide,onScan,cameraRead,onRetake}:{onClos
     if(!validation?.valid)return;
     resetSolution();const id=request.current;setBusy(true);setError('');
     try{const adapter=createSolver();solver.current=adapter;const result=await adapter.solve(validation.state);
-      if(id===request.current&&alive.current){setSolution({state:validation.state,moves:result.moves});setStep(0);scroll.current?.scrollTo({y:0,animated:false});}
+      if(id===request.current&&alive.current){setSolution({state:validation.state,moves:result.moves});scroll.current?.scrollTo({y:0,animated:false});}
     }catch(e){if(id===request.current&&alive.current)setError(e instanceof Error?e.message:'The solver could not start.');}
     finally{if(id===request.current&&alive.current){setBusy(false);solver.current?.dispose();solver.current=null;}}
   };
-  const move=solution?.moves[step],face=move?.[0] as Face|undefined;
-  const stepState=useMemo(()=>solution?stateAtStep(solution.state,solution.moves,step):null,[solution,step]);
   const guide=()=>{
-    if(stepState){onGuide(stepState);}
-    else if(validation?.valid)onGuide(validation.state);
+    if(validation?.valid)onGuide(validation.state);
   };
   return <Modal visible animationType="slide" onRequestClose={onClose}><SafeAreaView style={s.page}>
     <View style={s.nav}><Text style={s.brand}>point. <Text style={s.small}>/ {cameraRead?'CAMERA PICTURE':'PHOTO SOLVER'}</Text></Text><Button label="Close" secondary onPress={onClose}/></View>
     <ScrollView ref={scroll} contentContainerStyle={s.content}>
-      <Text style={s.kicker}>{solution?'YOUR CUBE IN 3D':cameraRead?'SIX PANELS CAPTURED':'FROM PICTURE TO PLAN'}</Text>
-      <Text accessibilityRole="header" style={s.title}>{solution?'One turn at a time.':cameraRead?'Picture captured.':'Solve from a picture.'}</Text>
+      {!solution&&<><Text style={s.kicker}>{cameraRead?'SIX PANELS CAPTURED':'FROM PICTURE TO PLAN'}</Text>
+      <Text accessibilityRole="header" style={s.title}>{cameraRead?'Picture captured.':'Solve from a picture.'}</Text></>}
       {!solution&&<>
         {cameraRead?<><Text style={s.body}>{cameraRead.layout==='net'?'Unfolded cube captured. Face names come from the layout: Up above Front, Left–Front–Right–Back across, and Down below Front. Check the colors and orientation before solving.':'The camera read all six grids. Panels below follow your picture from left to right, then top to bottom. Check their names before solving.'}</Text><Button label="Scan picture again" secondary onPress={onRetake??onClose}/></>:<>
         <Text style={s.body}>Choose a picture showing all six faces in separate, evenly spaced panels. We’ll read the colors on your device.</Text>
@@ -95,16 +90,7 @@ export function PhotoImport({onClose,onGuide,onScan,cameraRead,onRetake}:{onClos
         </>}
       </>}
       {solution&&<>
-        <Text style={s.body}>Keep the <Text style={s.bold}>{solution.state.centers.U} center on top</Text> and the <Text style={s.bold}>{solution.state.centers.F} center facing you</Text>. Keep that orientation between turns.</Text>
-        <View style={[s.turnCard,compact&&{padding:12,gap:12}]}>
-          <Text style={s.label}>{move?`TURN ${step+1} OF ${solution.moves.length}`:solution.moves.length?'INSTRUCTIONS COMPLETE':'PICTURE ALREADY SOLVED'}</Text>
-          {move&&face?<><View style={s.center}><View style={[s.swatch,{backgroundColor:COLOR_HEX[solution.state.centers[face]]}]}/><Text style={s.faceName}>{FACE_NAMES[face]} face · {move.endsWith("'")?'counterclockwise':'clockwise'}</Text></View><Text style={s.note}>Turn only this layer, one quarter turn. The model shows the motion from outside that face.</Text></>:<Text style={s.turnText}>{solution.moves.length?'You’ve reached the end of the steps. Use the camera to check your physical cube.':'The six faces in this picture are solved.'}</Text>}
-          {stepState&&<CubePreview state={stepState} move={move} compact={compact}/>}
-        </View>
-        <Text style={s.note}>Match your cube to Before, then make the highlighted turn. The model updates when you advance. Going back shows an earlier state; it does not undo your physical turn.</Text>
-        <View style={s.row}><Button label="Previous" secondary disabled={step===0} onPress={()=>setStep(n=>n-1)}/>{move&&<Button label="I made this turn →" onPress={()=>setStep(n=>n+1)}/>}</View>
-        {move?<Button label="Continue with camera" secondary onPress={guide}/>:<Button label="Check my cube with camera" onPress={onScan}/>}
-        <View style={s.section}><Text style={s.label}>ALL TURNS · OPTIONAL NOTATION</Text><Text selectable style={s.notation}>{solution.moves.join('  ')||'No turns needed.'}</Text></View>
+        <SolutionPlayer plan={solution} onCamera={onGuide}/>
         <Button label="Back to picture" secondary onPress={resetSolution}/>
       </>}
       {busy&&<View accessibilityLiveRegion="polite" style={s.loading}><ActivityIndicator color="#17271F"/><Text style={s.body}>{read?'Finding and verifying your solution…':'Reading the six panels…'}</Text></View>}

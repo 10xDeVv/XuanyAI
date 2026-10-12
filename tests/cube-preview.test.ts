@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {ALL_MOVES,applyMoves,BASIS,DEFAULT_CENTERS,inverseMove,moveFacelets,SOLVED} from '../src/core/cube';
-import {cubeSurfaces,previewArrow,projectSurfaces,stateAtStep,viewForMove} from '../src/core/cubePreview';
+import {cubeSurfaces,orbitView,panView,previewArrow,projectPoint,projectSurfaces,stateAtStep,viewForMove,zoomView} from '../src/core/cubePreview';
 import {CubeState,Face,FACES,Move} from '../src/core/types';
 
 const state:CubeState={facelets:applyMoves(SOLVED,['R','U',"F'",'L2','D','B2']),centers:DEFAULT_CENTERS,revision:7};
@@ -59,5 +59,18 @@ describe('3D replica and solution states',()=>{
     const view=viewForMove('F'),normal=previewArrow('F',view),inverse=previewArrow("F'",view);
     expect(normal[0]).toEqual(inverse[0]);expect(normal[10]).not.toEqual(inverse[10]);
     expect(BASIS.F.n).toEqual([0,0,1]);
+  });
+  it('supports continuous drag, bounded zoom and pan, without changing cube state',()=>{
+    const before=JSON.stringify(state),start=viewForMove('F');
+    const dragged=orbitView(start,105,-63),panned=panView(dragged,25,19),zoomed=zoomView(panned,1.2);
+    expect(projectPoint([1,1,1],dragged)).not.toEqual(projectPoint([1,1,1],start));
+    const a=projectPoint([1,1,1],dragged),b=projectPoint([1,1,1],panned);
+    expect(b.x-a.x).toBeCloseTo(25);expect(b.y-a.y).toBeCloseTo(19);
+    expect(zoomed.zoom).toBeCloseTo(1.2);
+    expect(projectSurfaces(cubeSurfaces(state,'F',.5),zoomed).every(s=>s.points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)))).toBe(true);
+    expect(Math.abs(orbitView(start,0,10000).pitch)).toBeLessThan(Math.PI/2);
+    expect(zoomView(start,100).zoom).toBe(1.65);expect(zoomView(start,.0001).zoom).toBe(.65);
+    expect(panView(start,10000,-10000)).toMatchObject({panX:90,panY:-90});
+    expect(JSON.stringify(state)).toBe(before);
   });
 });

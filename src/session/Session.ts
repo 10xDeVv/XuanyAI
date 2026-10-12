@@ -1,7 +1,7 @@
 import { CubeScanner, reliableFace } from '../core/scanner';
 import { CubeTracker, matchObservation } from '../core/tracker';
 import { SOLVED,validateCube } from '../core/cube';
-import { CubeObservation,CubeState,Move,FacePose,CubeColor,SolverAdapter,FACES,COLORS } from '../core/types';
+import { CubeObservation,CubeState,Move,FacePose,CubeColor,SolverAdapter,SolutionPlan,FACES,COLORS } from '../core/types';
 import {DiagramScanner} from '../photo/DiagramScanner';
 import {PhotoRead} from '../photo/model';
 import {physicalFrameGapMs} from '../core/timing';
@@ -13,6 +13,7 @@ export type SessionView={
   movesDone:number; movesRemaining:number; corrections:number;
   confirmedAt:number; startedAt:number; elapsedMs:number;
   picture?:PhotoRead; diagramCount?:number; diagramConfirmations?:number;
+  solution?:SolutionPlan;
 };
 const initial=():SessionView=>({stage:'setup',message:'Your cube. One turn at a time.',captured:[],poses:[],movesDone:0,movesRemaining:0,corrections:0,confirmedAt:0,startedAt:0,elapsedMs:0});
 export class Session {
@@ -29,12 +30,14 @@ export class Session {
   private verificationCounts=new Map<CubeColor,{count:number;since:number;last:number;processingMs:number}>();
   private lastObserved=-Infinity;
   private lastProcessingMs=0;
+  private previewOnly=false;
   constructor(private solver:SolverAdapter){}
   subscribe=(listener:()=>void)=>{this.listeners.add(listener);return ()=>{this.listeners.delete(listener);};};
   getSnapshot=()=>this.view;
   private update(patch:Partial<SessionView>){this.view={...this.view,...patch};for(const listener of this.listeners)listener();}
-  start(mode:'auto'|'diagram'='auto'){this.captureMode=mode;this.epoch++;this.scanner.reset();this.diagram.reset();this.tracker.reset();this.queue=[];this.verified.clear();this.verificationCounts.clear();this.lastObserved=-Infinity;this.lastProcessingMs=0;this.lostSince=null;this.view=initial();this.update({stage:'scanning',message:mode==='diagram'?'Point at a picture with all six panels. Keep the text upright and hold still.':'Rotate the whole cube slowly. Keep each layer in place.',startedAt:Date.now(),...(mode==='diagram'?{diagramCount:0}:{})});}
+  start(mode:'auto'|'diagram'='auto'){this.previewOnly=false;this.captureMode=mode;this.epoch++;this.scanner.reset();this.diagram.reset();this.tracker.reset();this.queue=[];this.verified.clear();this.verificationCounts.clear();this.lastObserved=-Infinity;this.lastProcessingMs=0;this.lostSince=null;this.view=initial();this.update({stage:'scanning',message:mode==='diagram'?'Point at a picture with all six panels. Keep the text upright and hold still.':'Rotate the whole cube slowly. Keep each layer in place.',startedAt:Date.now(),...(mode==='diagram'?{diagramCount:0}:{})});}
   rescan(){const {movesDone,corrections,startedAt}=this.view;this.start(this.captureMode);this.update({movesDone,corrections,startedAt});}
+  setPreviewOnly(enabled:boolean){this.previewOnly=enabled;this.tracker.reset();}
   startFromPhoto(cube:CubeState){
     const validity=validateCube(cube.facelets);
     if(!validity.valid)throw new Error(validity.reason);
@@ -42,6 +45,7 @@ export class Session {
     this.start();this.update({captured:FACES.map(f=>cube.centers[f])});void this.plan(cube);
   }
   suspend(){
+    if(this.previewOnly)return;
     this.tracker.reset();this.verificationCounts.clear();this.verified.clear();this.lastObserved=-Infinity;this.lastProcessingMs=0;
     // The user may turn unseen layers while the camera is paused or the app is backgrounded.
     if(!['setup','error','solved'].includes(this.view.stage))this.rescan();
@@ -49,6 +53,7 @@ export class Session {
   }
   cameraError(message:string){this.epoch++;this.update({stage:'error',message,poses:[],nextMove:undefined});}
   observe(o:CubeObservation){
+    if(this.previewOnly)return;
     if(o.timestamp<=this.lastObserved)return;const gap=o.timestamp-this.lastObserved,previousProcessingMs=this.lastProcessingMs;this.lastObserved=o.timestamp;this.lastProcessingMs=o.processingMs;
     if(['setup','picture','solved','error'].includes(this.view.stage))return;
     this.update({observation:o});
@@ -112,7 +117,7 @@ export class Session {
     if(result.status==='move'&&result.state&&result.move) {
       const correct=result.move===this.queue[0];
       this.update({cube:result.state,poses:[],nextMove:undefined,movesDone:this.view.movesDone+1,...(correct?{confirmedAt:Date.now()}:{})});
-      if(correct){this.queue.shift();this.update({movesRemaining:this.queue.length});if(!this.queue.length)this.finishOrReplan(result.state);}
+      if(correct){this.queue.shift();this.update({movesRemaining:this.queue.length,solution:{state:result.state,moves:[...this.queue]}});if(!this.queue.length)this.finishOrReplan(result.state);}
       else{this.update({corrections:this.view.corrections+1,message:'Different turn? That’s okay. Finding a new way.'});void this.plan(result.state);}
     }
   }
@@ -121,11 +126,11 @@ export class Session {
     this.verified.clear();this.verificationCounts.clear();this.tracker.reset();this.update({stage:'verifying',nextMove:undefined,poses:[],message:'One last look. Keep two sides visible as you rotate to check every side.'});
   }
   private async plan(cube:CubeState){
-    const epoch=++this.epoch;this.update({cube,stage:'planning',poses:[],nextMove:undefined,message:this.view.corrections?'Finding your new route…':'Finding your first move…'});
+    const epoch=++this.epoch;this.update({cube,solution:undefined,stage:'planning',poses:[],nextMove:undefined,message:this.view.corrections?'Finding your new route…':'Finding your first move…'});
     try {
       const result=await this.solver.solve(cube);
       if(epoch!==this.epoch||result.revision!==this.view.cube?.revision)return;
-      this.queue=result.moves;this.tracker.reset();this.update({movesRemaining:this.queue.length});
+      this.queue=[...result.moves];this.tracker.reset();this.update({movesRemaining:this.queue.length,solution:{state:cube,moves:[...this.queue]}});
       if(!this.queue.length)this.finishOrReplan(cube);
       else this.update({stage:'guiding',message:'Hold the cube still, with two sides visible.'});
     } catch(e){if(epoch===this.epoch)this.cameraError(e instanceof Error?e.message:'The solver could not start.');}

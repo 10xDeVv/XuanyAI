@@ -2,7 +2,7 @@ import {applyMoves,BASIS} from './cube';
 import {CubeColor,CubeState,Face,FACES,Move,Point} from './types';
 
 export type Vec3=[number,number,number];
-export type CameraView={yaw:number;pitch:number};
+export type CameraView={yaw:number;pitch:number;zoom?:number;panX?:number;panY?:number};
 export type CubeSurface={id:string;corners:Vec3[];normal:Vec3;center:Vec3;active:boolean;color?:CubeColor;face?:Face;sticker?:number};
 export type ProjectedSurface=CubeSurface&{points:Point[];depth:number;light:number};
 const add=(a:Vec3,b:Vec3):Vec3=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]];
@@ -16,6 +16,18 @@ const rotate=(p:Vec3,n:Vec3,angle:number):Vec3=>add(add(mul(p,Math.cos(angle)),m
 export function viewForMove(move?:Move):CameraView {
   const face=move?.[0];
   return {yaw:face==='L'?-Math.PI/4:face==='B'?Math.PI*3/4:Math.PI/4,pitch:face==='D'?-.5:.5};
+}
+/** Dragging the scene never changes the cube or its logical face reference. */
+export function orbitView(view:CameraView,dx:number,dy:number,span=320):CameraView {
+  const scale=320/Math.max(100,span);
+  return {...view,yaw:view.yaw-dx*.009*scale,pitch:clamp(view.pitch+dy*.009*scale,-1.5,1.5)};
+}
+export function panView(view:CameraView,dx:number,dy:number,span=320):CameraView {
+  const scale=320/Math.max(100,span);
+  return {...view,panX:clamp((view.panX??0)+dx*scale,-90,90),panY:clamp((view.panY??0)+dy*scale,-90,90)};
+}
+export function zoomView(view:CameraView,factor:number):CameraView {
+  return {...view,zoom:clamp((view.zoom??1)*factor,.65,1.65)};
 }
 export function stateAtStep(initial:CubeState,moves:readonly Move[],step:number):CubeState {
   const count=clamp(Math.floor(Number.isFinite(step)?step:0),0,moves.length);
@@ -48,8 +60,8 @@ function camera(view:CameraView) {
   return {dir,right,up:cross(dir,right)};
 }
 export function projectPoint(p:Vec3,view:CameraView,size=320):Point {
-  const {dir,right,up}=camera(view),scale=size*.16*8/(8-dot(p,dir));
-  return {x:size/2+dot(p,right)*scale,y:size/2-dot(p,up)*scale};
+  const {dir,right,up}=camera(view),scale=size*.16*(view.zoom??1)*8/(8-dot(p,dir));
+  return {x:size/2+dot(p,right)*scale+(view.panX??0),y:size/2-dot(p,up)*scale+(view.panY??0)};
 }
 export function projectSurfaces(surfaces:CubeSurface[],view:CameraView,size=320):ProjectedSurface[] {
   const {dir}=camera(view),eye=mul(dir,8);

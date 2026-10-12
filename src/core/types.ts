@@ -38,6 +38,7 @@ export type CubeObservation = {
   largerGrid?: boolean;
 };
 export type CubeState = { facelets: string; centers: CenterMap; revision: number };
+export type SolutionPlan = { state:CubeState; moves:Move[] };
 export type FacePose = { face: Face; quad: Quad; rotations: number[] };
 export type TrackingResult = {
   status: 'unchanged' | 'settling' | 'move' | 'ambiguous' | 'lost';

@@ -1,103 +1,54 @@
-import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
-import {AccessibilityInfo,AppState,Pressable,StyleSheet,Text,View} from 'react-native';
+import React,{useMemo,useState} from 'react';
+import {Pressable,StyleSheet,Text,useWindowDimensions,View} from 'react-native';
 import Svg,{Ellipse,Path,Polygon} from 'react-native-svg';
-import {CameraView,cubeSurfaces,previewArrow,projectSurfaces,viewForMove} from '../core/cubePreview';
-import {COLOR_HEX,CubeState,Face,Move,Point} from '../core/types';
+import {CameraView,cubeSurfaces,previewArrow,projectSurfaces,viewForMove,zoomView} from '../core/cubePreview';
+import {CubeColor,CubeState,Face,Move,Point} from '../core/types';
 import {FACE_NAMES} from '../photo/model';
+import CubeViewport from './CubeViewport';
 
-type Phase='before'|'turning'|'after';
+const materials:Record<CubeColor,string>={white:'#F4F6FA',yellow:'#FFDA32',orange:'#FF8A25',red:'#F5484F',green:'#25C879',blue:'#387BF2'};
 const shade=(hex:string,light:number)=>'#'+[1,3,5].map(i=>Math.min(255,Math.round(parseInt(hex.slice(i,i+2),16)*light)).toString(16).padStart(2,'0')).join('');
 const path=(points:Point[])=>points.map((p,i)=>`${i?'L':'M'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
 function roundedPolygon(points:Point[]):string {
   return points.map((p,i)=>{
     const before=points[(i+points.length-1)%points.length]!,after=points[(i+1)%points.length]!;
-    const a={x:p.x+(before.x-p.x)*.10,y:p.y+(before.y-p.y)*.10},b={x:p.x+(after.x-p.x)*.10,y:p.y+(after.y-p.y)*.10};
+    const a={x:p.x+(before.x-p.x)*.12,y:p.y+(before.y-p.y)*.12},b={x:p.x+(after.x-p.x)*.12,y:p.y+(after.y-p.y)*.12};
     return `${i?'L':'M'}${a.x},${a.y} Q${p.x},${p.y} ${b.x},${b.y}`;
   }).join(' ')+' Z';
 }
-function Control({label,onPress,selected=false,disabled=false,small=false}:{label:string;onPress:()=>void;selected?:boolean;disabled?:boolean;small?:boolean}) {
-  return <Pressable accessibilityRole="button" accessibilityState={{selected,disabled}} disabled={disabled} onPress={onPress}
-    style={({pressed})=>[s.control,small&&s.smallControl,selected&&s.selected,pressed&&{opacity:.7},disabled&&{opacity:.4}]}>
-    <Text style={[s.controlText,small&&s.smallText]}>{label}</Text>
-  </Pressable>;
+function Tool({label,text,onPress}:{label:string;text:string;onPress:()=>void}){
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({pressed})=>[s.tool,pressed&&{backgroundColor:'#394C45'}]}><Text style={s.toolText}>{text}</Text></Pressable>;
 }
 
-/** Preview animation never advances the real solution or verifies a camera turn. */
-export function CubePreview({state,move,compact=false,autoPlay=true}:{state:CubeState;move?:Move;compact?:boolean;autoPlay?:boolean}) {
-  const key=`${state.facelets}:${Object.values(state.centers).join(',')}:${move??''}`;
-  const [frame,setFrame]=useState<{key:string;progress:number;phase:Phase}>({key,progress:0,phase:'before'});
-  const [orbit,setOrbit]=useState<{key:string;view:CameraView}>({key,view:viewForMove(move)});
-  const [reduced,setReduced]=useState(true);
-  const raf=useRef<number|undefined>(undefined),delay=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
-  const cancel=useCallback(()=>{if(raf.current!==undefined)cancelAnimationFrame(raf.current);clearTimeout(delay.current);raf.current=undefined;},[]);
-  const show=useCallback((phase:'before'|'after')=>{cancel();setFrame({key,progress:phase==='after'?1:0,phase});},[cancel,key]);
-  const play=useCallback(()=>{
-    cancel();if(!move)return;
-    if(reduced){setFrame({key,progress:1,phase:'after'});return;}
-    setFrame({key,progress:0,phase:'before'});
-    delay.current=setTimeout(()=>{
-      let start:number|undefined,last=-Infinity;
-      const tick=(now:number)=>{
-        start??=now;const t=Math.min(1,(now-start)/(move.endsWith('2')?1800:1250));
-        if(now-last>=30||t===1){last=now;setFrame({key,progress:t*t*(3-2*t),phase:t===1?'after':'turning'});}
-        if(t<1)raf.current=requestAnimationFrame(tick);
-      };
-      raf.current=requestAnimationFrame(tick);
-    },350);
-  },[cancel,key,move,reduced]);
-  useEffect(()=>{
-    let alive=true;
-    void AccessibilityInfo.isReduceMotionEnabled().then(value=>{if(alive)setReduced(value);}).catch(()=>{});
-    const change=AccessibilityInfo.addEventListener('reduceMotionChanged',setReduced);
-    return()=>{alive=false;change.remove();};
-  },[]);
-  useEffect(()=>{
-    show('before');setOrbit({key,view:viewForMove(move)});
-    if(autoPlay&&!reduced)play();
-    return cancel;
-  },[key,move,autoPlay,reduced,play,show,cancel]);
-  useEffect(()=>{const change=AppState.addEventListener('change',status=>{if(status!=='active')show('before');});return()=>change.remove();},[show]);
-  const progress=frame.key===key?frame.progress:0,phase=frame.key===key?frame.phase:'before';
-  const view=orbit.key===key?orbit.view:viewForMove(move);
-  const surfaces=useMemo(()=>projectSurfaces(cubeSurfaces(state,move,progress),view),[key,progress,view]);
+/** A freely orbitable 3D scene. View gestures never turn cube layers. */
+export function CubePreview({state,move,progress=0,animating=false}:{state:CubeState;move?:Move;progress?:number;animating?:boolean}){
+  const {height,width}=useWindowDimensions();
+  const [view,setView]=useState<CameraView>(()=>({...viewForMove(move),zoom:1.08}));
+  const surfaces=useMemo(()=>projectSurfaces(cubeSurfaces(state,move,progress),view),[state.facelets,state.centers,move,progress,view]);
   const activeFace=move?.[0] as Face|undefined;
-  const faceVisible=activeFace&&surfaces.some(p=>p.sticker!==undefined&&p.face===activeFace&&p.sticker%9===4);
-  const arrow=move&&faceVisible&&phase!=='turning'?previewArrow(move,view):null;
-  const arrowEnd=arrow?.[arrow.length-1],arrowPrev=arrow?.[arrow.length-4];
-  const angle=arrowEnd&&arrowPrev?Math.atan2(arrowEnd.y-arrowPrev.y,arrowEnd.x-arrowPrev.x):0;
-  const arrowHead=arrowEnd?`${arrowEnd.x},${arrowEnd.y} ${arrowEnd.x-12*Math.cos(angle-.5)},${arrowEnd.y-12*Math.sin(angle-.5)} ${arrowEnd.x-12*Math.cos(angle+.5)},${arrowEnd.y-12*Math.sin(angle+.5)}`:'';
-  const visibleCenters=surfaces.filter(p=>p.sticker!==undefined&&p.sticker%9===4).map(p=>p.face!);
-  const orbitBy=(yaw:number,pitch=0)=>setOrbit({key,view:{yaw:view.yaw+yaw,pitch:pitch? -view.pitch:view.pitch}});
-  const phaseLabel=!move?'YOUR CUBE':phase==='before'?'BEFORE THIS TURN':phase==='turning'?'TURN PREVIEW':'AFTER THIS TURN';
-  return <View style={[s.card,compact&&s.compact]}>
-    <View style={s.header}><Text style={s.eyebrow}>YOUR CUBE · 3D</Text><Text accessibilityLiveRegion="polite" style={s.phase}>{phaseLabel}</Text></View>
-    <View accessible accessibilityRole="image" accessibilityLabel={`3D replica of your cube. ${phaseLabel.toLowerCase()}${move&&activeFace?`. ${FACE_NAMES[activeFace]} face, ${move.endsWith("'")?'counterclockwise':'clockwise'}`:''}.`} style={{width:'100%',height:compact?220:290}}>
-      <Svg width="100%" height="100%" viewBox="0 0 320 320">
-        <Ellipse cx={160} cy={289} rx={81} ry={12} fill="#17271F" opacity={.08}/>
-        {surfaces.map(p=>p.color?<Path key={p.id} d={roundedPolygon(p.points)} fill={shade(COLOR_HEX[p.color],p.light+.15)}
-          stroke={p.active?'#D1F58A':'#17231E'} strokeWidth={p.active?2.3:.65} strokeLinejoin="round"/>
-          :<Polygon key={p.id} points={p.points.map(v=>`${v.x},${v.y}`).join(' ')} fill={p.active?'#2D4032':'#18251E'} stroke="#111C16" strokeWidth={.5} strokeLinejoin="round"/>)}
-        {arrow&&<><Path d={path(arrow)} fill="none" stroke="#17271F" strokeWidth={8} strokeLinecap="round"/><Path d={path(arrow)} fill="none" stroke="#E3FFAB" strokeWidth={4.5} strokeLinecap="round"/><Polygon points={arrowHead} fill="#E3FFAB" stroke="#17271F" strokeWidth={1.3}/></>}
+  const faceVisible=activeFace&&surfaces.some(p=>p.face===activeFace&&p.sticker!==undefined&&p.sticker%9===4);
+  const arrow=move&&faceVisible&&!animating?previewArrow(move,view):null;
+  const end=arrow?.[arrow.length-1],prev=arrow?.[arrow.length-4],angle=end&&prev?Math.atan2(end.y-prev.y,end.x-prev.x):0;
+  const head=end?`${end.x},${end.y} ${end.x-11*Math.cos(angle-.5)},${end.y-11*Math.sin(angle-.5)} ${end.x-11*Math.cos(angle+.5)},${end.y-11*Math.sin(angle+.5)}`:'';
+  const centers=surfaces.filter(p=>p.sticker!==undefined&&p.sticker%9===4).map(p=>p.face!);
+  const sceneHeight=width<600?Math.min(290,Math.max(200,height*.32)):360;
+  const focus=()=>setView({...viewForMove(move),zoom:1.08});
+  return <View style={s.scene}>
+    <View style={s.top}><Text style={s.eyebrow}>DRAG TO EXPLORE</Text><View style={s.tools}><Tool label="Zoom out" text="−" onPress={()=>setView(v=>zoomView(v,.9))}/><Tool label="Zoom in" text="+" onPress={()=>setView(v=>zoomView(v,1.1))}/><Tool label="Reset cube view" text="Reset" onPress={focus}/></View></View>
+    <CubeViewport view={view} onChange={setView} height={sceneHeight}>
+      <Svg width="100%" height="100%" viewBox="0 0 320 320" accessibilityLabel="Your scanned cube with the current turn highlighted">
+        <Ellipse cx={160+(view.panX??0)} cy={294+(view.panY??0)} rx={83*(view.zoom??1)} ry={13} fill="#000" opacity={.26}/>
+        {surfaces.map(p=>p.color?<Path key={p.id} d={roundedPolygon(p.points)} fill={shade(materials[p.color],(p.light+.14)*(move&&!p.active ? .86 : 1))}
+          stroke={p.active?'#E6FFB7':'#FFFFFF20'} strokeWidth={p.active?1.9:.65} strokeLinejoin="round"/>
+          :<Polygon key={p.id} points={p.points.map(v=>`${v.x},${v.y}`).join(' ')} fill={shade('#29302F',p.light)} stroke="#101716" strokeWidth={.55} strokeLinejoin="round"/>)}
+        {arrow&&<><Path d={path(arrow)} fill="none" stroke="#071310" strokeWidth={7} strokeLinecap="round"/><Path d={path(arrow)} fill="none" stroke="#E6FFB7" strokeWidth={3.5} strokeLinecap="round"/><Polygon points={head} fill="#E6FFB7" stroke="#071310" strokeWidth={1}/></>}
       </Svg>
-    </View>
-    <View style={s.centers}>{visibleCenters.map(face=><View key={face} style={s.center}><View style={[s.swatch,{backgroundColor:COLOR_HEX[state.centers[face]]}]}/><Text style={s.centerText}>{FACE_NAMES[face]}</Text></View>)}</View>
-    {move&&<View style={s.controls}>
-      <Control label="Before" selected={phase==='before'} onPress={()=>show('before')}/>
-      <Control label={reduced?'Show result':'Replay turn'} selected={phase==='turning'} onPress={play}/>
-      <Control label="After" selected={phase==='after'} onPress={()=>show('after')}/>
-    </View>}
-    <View style={s.controls}>
-      <Control small label="View left" onPress={()=>orbitBy(-Math.PI/2)}/>
-      <Control small label="View right" onPress={()=>orbitBy(Math.PI/2)}/>
-      <Control small label={view.pitch>=0?'View below':'View above'} onPress={()=>orbitBy(0,1)}/>
-      <Control small label="Reset view" onPress={()=>setOrbit({key,view:viewForMove(move)})}/>
-    </View>
-    {!compact&&<Text style={s.note}>{move?'The outlined layer moves. The preview shows how your cube should look after this turn.':'Every square reflects the current solution state.'}</Text>}
+    </CubeViewport>
+    <View style={s.centers}>{centers.map(face=><View key={face} style={s.center}><View style={[s.swatch,{backgroundColor:materials[state.centers[face]]}]}/><Text style={s.centerText}>{FACE_NAMES[face]}</Text></View>)}</View>
+    <View style={s.bottom}><Text style={s.hint}>{move&&!faceVisible?'The turning face is behind this view.':'Pinch / scroll to zoom · Two fingers / Shift-drag to pan'}</Text><Tool label="Show highlighted turn" text="Show turn ↗" onPress={focus}/></View>
   </View>;
 }
 const s=StyleSheet.create({
-  card:{width:'100%',backgroundColor:'#F0F3E9',borderWidth:1,borderColor:'#DCE4D2',borderRadius:18,padding:14,gap:10},compact:{borderWidth:0,borderRadius:0,padding:12,gap:5},
-  header:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:8},eyebrow:{fontSize:9,letterSpacing:1.2,fontWeight:'700',color:'#667760'},phase:{fontSize:9,fontWeight:'700',color:'#3F6138'},
-  centers:{flexDirection:'row',gap:14,justifyContent:'center',flexWrap:'wrap',marginBottom:4},center:{flexDirection:'row',gap:5,alignItems:'center'},swatch:{width:9,height:9,borderRadius:3,borderWidth:.5,borderColor:'#17271F55'},centerText:{fontSize:10,color:'#53604E'},
-  controls:{flexDirection:'row',gap:6},control:{flex:1,minHeight:44,borderRadius:9,backgroundColor:'#E0E7D6',alignItems:'center',justifyContent:'center',paddingHorizontal:4},selected:{backgroundColor:'#D1F58A'},controlText:{fontSize:12,fontWeight:'600',color:'#263A27'},smallControl:{backgroundColor:'transparent',minHeight:44},smallText:{fontSize:9,fontWeight:'500'},note:{fontSize:11,lineHeight:17,textAlign:'center',color:'#697662'},
+  scene:{width:'100%',backgroundColor:'#182722',borderRadius:20,overflow:'hidden'},top:{paddingLeft:18,paddingRight:10,paddingTop:7,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},eyebrow:{fontSize:9,letterSpacing:1.3,color:'#B2C2B6',fontWeight:'600'},tools:{flexDirection:'row',gap:2},tool:{minWidth:42,minHeight:44,paddingHorizontal:9,alignItems:'center',justifyContent:'center',borderRadius:9},toolText:{fontSize:12,color:'#E6F5DE',fontWeight:'600'},
+  centers:{flexDirection:'row',gap:18,justifyContent:'center',height:24,alignItems:'center'},center:{flexDirection:'row',gap:5,alignItems:'center'},swatch:{width:8,height:8,borderRadius:2},centerText:{fontSize:10,color:'#C4D2C8'},bottom:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:12,paddingBottom:5,gap:6},hint:{fontSize:9,lineHeight:14,color:'#A5B8AC',flex:1},
 });

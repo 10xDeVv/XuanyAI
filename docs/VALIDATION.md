@@ -14,6 +14,8 @@ The camera overlay marks saved faces with checks and highlights unreadable squar
 
 The reported two-face field failure remains unverified. A short screen recording of a failing real-cube scan and camera photos of the uncaptured faces are needed to reproduce that specific failure. Existing public exploratory photos still expose overexposure and color-ambiguity limitations. Do not report this release as meeting physical acceptance.
 
+Published browser build: https://point-scan-solve-10xdevv--k4m753isvb.expo.app (source `6918ac0`), also on the `prototype` alias. The published app, workers, and WASM match the tested export byte-for-byte; the home page loads without console errors. Final web and iOS/Android Hermes exports pass. No new installed native binary or physical-phone trial is claimed for this release.
+
 ## Checks completed
 
 | Check | Result | Evidence / scope |

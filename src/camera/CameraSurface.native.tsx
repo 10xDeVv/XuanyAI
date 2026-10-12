@@ -7,7 +7,7 @@ import {CameraSurfaceProps} from './types';
 import {CubeObservation} from '../core/types';
 
 // Stable object identities keep VisionCamera from rebuilding its output on each observation.
-const CUBE_RESOLUTION={width:640,height:480},PICTURE_RESOLUTION={width:1280,height:960};
+const CUBE_RESOLUTION={width:960,height:720},PICTURE_RESOLUTION={width:1280,height:960};
 
 export default function CameraSurface(props:CameraSurfaceProps){
   const callbacks=useRef(props);callbacks.current=props;
@@ -34,7 +34,7 @@ export default function CameraSurface(props:CameraSurfaceProps){
   },[]);
   const fail=useCallback((message:string,requestEpoch?:number)=>{if(mounted.current&&(requestEpoch===undefined||requestEpoch===epoch.current.value))callbacks.current.onError(message);},[]);
   const output=useFrameOutput({
-    targetResolution:props.picture?PICTURE_RESOLUTION:CUBE_RESOLUTION,pixelFormat:'rgb',enablePhysicalBufferRotation:true,enablePreviewSizedOutputBuffers:!props.picture,
+    targetResolution:props.picture?PICTURE_RESOLUTION:CUBE_RESOLUTION,pixelFormat:'rgb',enablePhysicalBufferRotation:true,enablePreviewSizedOutputBuffers:false,
     onFrame(frame){
       'worklet';
       const capturedAt=Date.now();

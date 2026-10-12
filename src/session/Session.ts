@@ -73,7 +73,7 @@ export class Session {
         this.update({message:o.largerGrid?'Use a 3 × 3 cube. Keep other grids outside the camera view.':'Extra grids are in view. Hold the cube against a plain background.'});return;
       }
       this.update({diagramCount:undefined});
-      const scan=this.scanner.observe(o);this.update({captured:scan.captured,rechecking:scan.rechecking,message:scan.message});
+      const scan=this.scanner.observe(o);this.update({captured:scan.captured,rechecking:scan.rechecking,message:scan.message,...(scan.captured.length>this.view.captured.length?{confirmedAt:Date.now()}:{})});
       if(scan.state)void this.plan(scan.state);
       return;
     }

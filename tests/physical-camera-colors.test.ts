@@ -7,6 +7,7 @@ import {matchObservation} from '../src/core/tracker';
 import {CubeObservation,Face} from '../src/core/types';
 import {projected,state} from './fixtures';
 import {renderObservation} from './pixels';
+import {cameraFrameSize} from '../src/camera/frameSize';
 
 const require=createRequire(import.meta.url);
 const cube=state(applyMoves(SOLVED,['R','U',"F'",'D','L2','B',"R'",'U2','F','L']));
@@ -105,6 +106,23 @@ describe.skipIf(!existsSync('public/vision/cube-vision.wasm'))('physical camera 
       for(const faces of views.filter(faces=>faces.some(f=>!captured.includes(cube.centers[f]))))capture(faces,1);
       expect(result!.captured).toHaveLength(6);expect(result!.state).toBeDefined();
       for(const view of observed)expect(matchObservation(result!.state!,view)).not.toBeNull();
+    });
+  });
+  it('captures the small narrow-seam cube at the production portrait resolution without moving it closer',async()=>{
+    await run(detect=>{
+      const scanner=new CubeScanner(),views:Face[][]=[['F','R','U'],['R','B','D'],['F','L','U'],['L','B','D']];
+      const {width,height}=cameraFrameSize(960,1280),scale=width/1200;
+      let timestamp=0,result;
+      for(const faces of views){
+        const o=projected(cube,faces,0);o.transform={...o.transform,frameWidth:width,frameHeight:height};
+        o.faces.forEach(f=>f.quad=f.quad.map(p=>({x:width/2+(p.x-320)*scale,y:height/2+(p.y-240)*scale})) as typeof f.quad);
+        const view=detect(o,renderObservation(o,{inset:.025,rounded:.20}));
+        if(faces===views[0])expect(view.faces.filter(reliableFace)).toHaveLength(3);
+        expect(matchObservation(cube,view)).not.toBeNull();
+        for(let i=0;i<6;i++)result=scanner.observe({...view,timestamp:timestamp+=150});
+      }
+      expect(result!.captured).toHaveLength(6);expect(result!.state).toBeDefined();
+      for(const faces of views)expect(matchObservation(result!.state!,projected(cube,faces,timestamp))).not.toBeNull();
     });
   });
 });

@@ -10,6 +10,8 @@ For pixel regression, save representative camera frames as RGBA bytes or PNG wit
 
 ## Ten capture trials per phone/surface
 
+For the October 12 two-face failure, first retain a 20–30 second screen recording of the actual failed scan and use **Help → Save a camera photo** on each uncaptured face. Record the camera in use and cube type. On the updated build, confirm that individual uncertain squares are marked, saved views request rotation, and frame processing at 960 pixels stays within the physical one-second deadline. Repeat with a small cube in portrait, brief confidence dips, and whole-cube rotations. A permanently uncertain square must remain unconfirmed; a real layer twist must still trigger rechecking.
+
 Use ten different legal known scrambles. Vary which face appears first and the order of whole-cube rotations. Begin timing at the first clear cube view. Stop at “Cube captured.” Compare the reconstructed state with ground truth up to whole-cube rotation. A timed-out, rejected, or incorrect state is a failed trial. Target: at least 9/10 correct captures within 30 seconds on each phone.
 
 ## Ten complete solves per platform

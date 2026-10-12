@@ -20,7 +20,11 @@ function cameraPixels(source:Uint8Array,width:number,height:number){
   if(width===720&&height===1280)return source;
   const output=new Uint8Array(width*height*4),scale=720/width;
   for(let y=0;y<height;y++)for(let x=0;x<width;x++)for(let c=0;c<4;c++){
-    let sum=0;for(let dy=0;dy<scale;dy++)for(let dx=0;dx<scale;dx++)sum+=source[(((y*scale+dy)*720+x*scale+dx)*4)+c]!;
+    let sum=0;
+    for(let sy=Math.floor(y*scale);sy<Math.ceil((y+1)*scale);sy++)for(let sx=Math.floor(x*scale);sx<Math.ceil((x+1)*scale);sx++){
+      const weight=(Math.min(sx+1,(x+1)*scale)-Math.max(sx,x*scale))*(Math.min(sy+1,(y+1)*scale)-Math.max(sy,y*scale));
+      sum+=source[(sy*720+sx)*4+c]!*weight;
+    }
     output[(y*width+x)*4+c]=Math.round(sum/(scale*scale));
   }
   return output;
@@ -42,7 +46,7 @@ describe.skipIf(!existsSync('public/vision/cube-vision.wasm'))('portrait camera 
     const scan=(d:CubeObservation)=>{const scanner=new DiagramScanner();let result;for(const timestamp of [0,150,300,450])result=scanner.observe({...d,timestamp});return result!;};
     // Picture mode preserves the source detail even when the detector can also
     // recover this particular sheet at the smaller physical-cube resolution.
-    expect(cameraFrameSize(720,1280,false)).toEqual({width:360,height:640});
+    expect(cameraFrameSize(720,1280,false)).toEqual({width:540,height:960});
     expect(cameraFrameSize(720,1280,true)).toEqual({width:720,height:1280});
     const low=scan(await detect(false)).read;
     if(low)expect(assemblePhoto(low.panels,low.labels!,[0,0,0,0,0,0])).toMatchObject({valid:true,state:{facelets:netCube.facelets}});

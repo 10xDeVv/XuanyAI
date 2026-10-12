@@ -2,6 +2,7 @@ import { CubeColor, CubeObservation, CubeState, FACES, Face, FaceGrid, CenterMap
 import { edgeToward, rotateGrid, rotationsMatching, validateCube } from './cube';
 import { sharedEdge } from './geometry';
 import { physicalFrameGapMs } from './timing';
+import { FaceEvidence } from './faceEvidence';
 
 type StoredFace={grid:FaceGrid<CubeColor>;quality:number;confirmedAt:number};
 type EdgeConstraint={a:CubeColor;b:CubeColor;aEdges:number[];bEdges:number[]};
@@ -15,6 +16,7 @@ function permutations<T>(items:T[]):T[][] {
 }
 
 export class CubeScanner {
+  private evidence=new FaceEvidence();
   private faces=new Map<CubeColor,StoredFace>();
   private pending=new Map<CubeColor,{signature:string;count:number;since:number;last:number;processingMs:number}>();
   private edges:EdgeConstraint[]=[];
@@ -27,15 +29,16 @@ export class CubeScanner {
   private assembledState:CubeState|undefined;
   private lastTimestamp=-Infinity;
   private revision=0;
-  reset() {this.faces.clear();this.pending.clear();this.edges=[];this.pendingEdges.clear();this.reacquired.clear();this.uncertain.clear();this.rechecking.clear();this.changedSince=undefined;this.assemblyKey='';this.assembledState=undefined;this.lastTimestamp=-Infinity;this.revision++;}
+  reset() {this.evidence.reset();this.faces.clear();this.pending.clear();this.edges=[];this.pendingEdges.clear();this.reacquired.clear();this.uncertain.clear();this.rechecking.clear();this.changedSince=undefined;this.assemblyKey='';this.assembledState=undefined;this.lastTimestamp=-Infinity;this.revision++;}
   observe(o:CubeObservation):ScanProgress {
     const result=(message:string,extra:Partial<ScanProgress>={}):ScanProgress=>({captured:[...this.faces.keys()],rechecking:[...new Set([...this.uncertain,...this.rechecking])],message,...extra});
     if(o.timestamp<=this.lastTimestamp) return result('Rotate the whole cube slowly.');
     this.lastTimestamp=o.timestamp;
+    const measured=this.evidence.observe(o);
     if(o.quality==='blur') {this.pending.clear();this.pendingEdges.clear();return result('Pause for a moment so I can see the squares.');}
     if(o.quality==='glare') {this.pending.clear();this.pendingEdges.clear();return result('Tilt the cube away from the light.');}
     // Duplicate center labels are color ambiguity, not two independent views.
-    const visible=o.faces.filter(f=>reliableFace(f)&&o.faces.filter(other=>other.colors[4]===f.colors[4]).length===1);
+    const visible=measured.filter(f=>reliableFace(f)&&o.faces.filter(other=>other.colors[4]===f.colors[4]).length===1);
     for(const c of this.pending.keys())if(!visible.some(f=>f.colors[4]===c))this.pending.delete(c);
     if(!visible.length) {
       this.pendingEdges.clear();
@@ -97,7 +100,11 @@ export class CubeScanner {
     const check=[...this.uncertain,...this.rechecking][0];
     if(check)return result(`Your saved faces are kept. Show the ${check} center and pause so I can check its colors.`,{invalidated});
     this.changedSince=undefined;
-    if(this.faces.size<6) return result(this.faces.size?'Face saved. Turn the whole cube a little, then pause with two sides visible.':'Face found. Hold still for a moment to capture it.');
+    if(this.faces.size<6) {
+      const unsaved=visible.find(f=>!this.faces.has(f.colors[4]));
+      if(unsaved)return result(`Hold the ${unsaved.colors[4]} face still until it is saved.`);
+      return result(this.faces.size?'Face saved. Slowly roll the whole cube to an unchecked center, then pause.':'Face found. Hold still for a moment to capture it.');
+    }
     const counts=new Map<CubeColor,number>();
     for(const f of this.faces.values())for(const c of f.grid)counts.set(c,(counts.get(c)??0)+1);
     if([...counts.values()].some(n=>n!==9)||counts.size!==6){

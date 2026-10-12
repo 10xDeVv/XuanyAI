@@ -18,7 +18,7 @@ public:
     if(mirrored)cv::flip(rgba,rgba,1);
     // Camera targetResolution is negotiated, not guaranteed. Bound the actual
     // buffer here to keep the same processing budget as the browser pipeline.
-    const int maxDimension=picture?1280:640;
+    const int maxDimension=picture?1280:960;
     if(std::max(rgba.cols,rgba.rows)>maxDimension){double scale=double(maxDimension)/std::max(rgba.cols,rgba.rows);cv::resize(rgba,rgba,{},scale,scale,cv::INTER_AREA);}
     auto json=::cubevision::detect(rgba.data,rgba.cols,rgba.rows,int(rgba.step),picture);
     json.pop_back();return json+",\"width\":"+std::to_string(rgba.cols)+",\"height\":"+std::to_string(rgba.rows)+"}";

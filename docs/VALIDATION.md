@@ -1,6 +1,18 @@
 # Prototype validation record
 
-Updated October 10, 2026 (America/Toronto). **Physical acceptance remains incomplete.** No Android/iPhone models or OS versions have been confirmed and no physical cube recording set has been collected. The requested 9/10 capture and solve rates, one-second p95 turn confirmation, and zero false confirmations are unmeasured.
+Updated October 12, 2026 (America/Toronto). **Physical acceptance remains incomplete.** The latest user-reported physical trial captured approximately two faces and failed to complete. No Android/iPhone models or OS versions have been confirmed and no recording of that physical failure has been collected. The requested 9/10 capture and solve rates, one-second p95 turn confirmation, and zero false confirmations are unmeasured.
+
+## October 12: physical capture evidence and detail
+
+Physical frames now retain up to 960 pixels on the long side (previously 640), without upscaling. Native output requests 960×720 and disables preview-sized buffers so a small UI preview cannot silently limit detector input. Its C++ buffer bound is also 960; installed native builds require rebuilding to receive this change. Picture mode remains at 1280. Frame deadlines and single-request processing are unchanged. Phone processing latency at the higher resolution is unmeasured.
+
+Capture previously needed three consecutive fully confident face observations. A changing low-confidence square could prevent a face from ever being saved. A bounded six-reading window now allows each square to contribute independently once measured clearly at least three times. Current labels must agree; confident contradictions, ambiguous centers, large movements, blur, glare, occlusion, and expired evidence cannot be voted away. Grid rotation is aligned using corner geometry. This window only feeds initial capture; move and solved-state verification still require fresh distinguishing observations.
+
+The new regression has an uncertain square on every frame and reconstructs the exact six-face state. Negative cases cover permanently uncertain colors, differing current labels, real contradictions, displacement, frame gaps, blur/glare/occlusion, and center ambiguity. The existing small narrow-seam generated fixture detects only two of three faces at the former portrait resolution; at the production 960-pixel limit it detects all three and completes an exact scan through neighboring views. These are generated images and observations, not recordings of the reported real cube.
+
+The camera overlay marks saved faces with checks and highlights unreadable squares. Once visible faces are saved, the caption asks the user to rotate instead of continuing to say "Hold still." The browser MediaStream replay reaches the 30-turn interactive 3D guide; Previous, Replay, and Next remain available. Phone-layout evidence: `artifacts/physical-capture-feedback.png`. No browser console errors were observed. The C++ recognition algorithm and WASM version are unchanged (`edf9e169743a5c96`).
+
+The reported two-face field failure remains unverified. A short screen recording of a failing real-cube scan and camera photos of the uncaptured faces are needed to reproduce that specific failure. Existing public exploratory photos still expose overexposure and color-ambiguity limitations. Do not report this release as meeting physical acceptance.
 
 ## Checks completed
 
@@ -8,7 +20,7 @@ Updated October 10, 2026 (America/Toronto). **Physical acceptance remains incomp
 | --- | --- | --- |
 | TypeScript | Pass | `tsc --noEmit`, strict project settings |
 | Expo configuration/dependencies | 21/21 pass | `artifacts/build-logs/expo-doctor.log` |
-| Automated tests | 106/106 pass | Final October 10 camera correction; 98 public tests plus eight private screenshot replays. Includes actual worker dispatch, camera color variation, capture cadence, cube invariants, solve verification, and wrong/obscured turn rejection. |
+| Automated tests | 150/150 pass | October 12 capture correction; 142 public tests plus eight private screenshot replays. Includes actual worker dispatch, per-square capture evidence, camera color variation, capture cadence, cube invariants, solve verification, and wrong/obscured turn rejection. |
 | Cube model and solver | Pass | All 18 legal turns compared with cubejs, inverse/invariant tests, 20 randomized solutions applied and verified |
 | Capture and tracking | Pass on synthetic observations | Arbitrary views, adjacency/orientation assembly, invalid state reacquisition, layer-change invalidation, wrong turns, ambiguity, stale results, and fresh six-face completion. Completion rejects a hidden last-face turn and discards earlier checks after blur or a frame gap. |
 | Compiled detector integration | Pass on synthetic pixels | Production C++/OpenCV WASM detects all three faces in four differently oriented views, reconstructs a known scramble, and identifies correct and alternative settled turns |

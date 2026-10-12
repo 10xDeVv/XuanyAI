@@ -68,7 +68,8 @@ export default function SolverScreen(){
     localError??(hidden?'Rotate the whole cube to show this center.':view.message)
   ]),textContext);
   const [phase,message]=JSON.parse(instruction) as [string,string];
-  const cameraStatus=useReadableMessage(status,`${active}:${facing}:${diagram}`);
+  const visibleSaved=stage==='scanning'&&!diagram&&!!view.observation?.faces.length&&view.observation.faces.every(f=>view.captured.includes(f.colors[4])&&!view.rechecking?.includes(f.colors[4]));
+  const cameraStatus=useReadableMessage(visibleSaved?'Faces saved · Rotate the whole cube':status,`${active}:${facing}:${diagram}`);
   const minutes=Math.floor(view.elapsedMs/60000),seconds=Math.floor(view.elapsedMs/1000)%60;
   return <SafeAreaView style={s.page}>
     <ScrollView ref={scroll} contentContainerStyle={[s.shell,wide&&{paddingHorizontal:56},compact&&{paddingHorizontal:14}]}>
@@ -86,7 +87,7 @@ export default function SolverScreen(){
           <View style={[s.viewer,showModel?{backgroundColor:'transparent',borderRadius:0}:{height:wide?490:compact?Math.max(230,Math.min(380,height*.42)):320}]}>
             {active&&<CameraSurface active={active} facing={facing} picture={diagram&&stage==='scanning'} saveFrameRequest={saveFrameRequest} onObservation={observe} onError={onError} onStatus={setStatus} onSuspend={suspend}/>}
             {(!active||setup)&&!showModel&&<View style={s.illustration}><View style={s.orbit}/><View style={s.orbitInner}/><View style={{width:285,height:300}}><CubeArt/></View></View>}
-            {active&&!paused&&!showModel&&<GuidanceOverlay observation={view.observation} poses={view.poses} move={view.nextMove} panels={diagram}/>}
+            {active&&!paused&&!showModel&&<GuidanceOverlay observation={view.observation} poses={view.poses} move={view.nextMove} panels={diagram} scan={stage==='scanning'&&!diagram?{captured:view.captured,rechecking:view.rechecking}:undefined}/>}
             {showModel&&view.solution&&<SolutionPlayer key={`${view.solution.state.revision}:${view.solution.state.facelets}`} plan={view.solution} onStateChange={rememberPreview} onCamera={guidePhoto}/>}
             {!showModel&&<View style={s.viewerTop}><View style={s.liveChip}><View style={[s.dot,{backgroundColor:active?lime:'#7A887E'}]}/><Text style={s.liveText}>{active?'LIVE GUIDE':solved?'NICE WORK':'CAMERA PREVIEW'}</Text></View><Text style={s.viewerTag}>3 × 3</Text></View>}
             {active&&stage==='scanning'&&!diagram&&<View pointerEvents="none" style={s.reticle}><View style={s.reticleCorner}/><View style={[s.reticleCorner,{right:0,transform:[{rotate:'90deg'}]}]}/><View style={[s.reticleCorner,{bottom:0,transform:[{rotate:'-90deg'}]}]}/><View style={[s.reticleCorner,{right:0,bottom:0,transform:[{rotate:'180deg'}]}]}/></View>}

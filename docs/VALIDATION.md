@@ -169,6 +169,8 @@ The 3D guide pauses camera tracking and releases the camera; missing camera fram
 
 Validation: 138 tests pass, including new gesture-transform and manual/camera separation regressions; strict TypeScript passes. Browser replays reach the shared player from a generated physical cube and from the screen-picture recording. Direct mouse dragging changes projected geometry; reset restores it exactly. Pan, zoom, replay, forward and backward navigation were verified. A complete 33-turn picture solution reaches a uniformly solved model, with Previous still available; replay and forward/backward round trips preserve the exact expected state. The 390-pixel responsive layout and animated turn were inspected. No browser console errors were observed. Evidence remains local in `artifacts/interactive-cube-motion.png` and `artifacts/interactive-cube-complete.png`. This verifies browser interaction and replay behavior; physical iPhone/Android touch performance and native runtime gestures still need hardware testing.
 
+Published interactive guide: https://point-scan-solve-10xdevv--jktl4uur6m.expo.app (source `a253728`). Web and sequential iOS/Android Hermes exports pass. The live app and workers match the tested export byte-for-byte; the published home screen loads without console errors. The chosen orbit was also verified to survive advancing to the final solution state.
+
 ## Builds and access
 
 - HTTPS preview: https://point-scan-solve-10xdevv--prototype.expo.app

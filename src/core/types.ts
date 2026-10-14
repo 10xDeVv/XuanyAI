@@ -51,6 +51,7 @@ export type TrackingResult = {
 export type SolverResult = { revision: number; moves: Move[] };
 export interface SolverAdapter {
   ready(): Promise<void>;
+  assemble?(input:import('./assembleScan').AssemblyInput):Promise<import('./assembleScan').ScanAssembly>;
   solve(state: CubeState): Promise<SolverResult>;
   dispose(): void;
 }

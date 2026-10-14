@@ -44,10 +44,11 @@ describe('automatic scanning',()=>{
     for(const faces of views)expect(matchObservation(result!.state!,projected(s,faces,t+100))).not.toBeNull();
     expect(applyMoves(result!.state!.facelets,solveFacelets(result!.state!.facelets))).toBe(SOLVED);
   },30000);
-  it('never completes from isolated faces with no orientation evidence',()=>{
+  it('reconstructs a unique scramble from isolated faces without requiring an adjacent view',()=>{
     const scanner=new CubeScanner(),s=state(applyMoves(SOLVED,scramble));let result,t=0;
     for(const f of FACES)for(let n=0;n<3;n++){t+=150;result=scanner.observe(observation(s,[f],t));}
-    expect(result!.captured).toHaveLength(6);expect(result!.state).toBeUndefined();
+    expect(result!.captured).toHaveLength(6);expect(result!.state).toBeDefined();
+    for(const faces of [['F','R','U'],['B','L','D']] as Face[][])expect(matchObservation(result!.state!,projected(s,faces,t+150))).not.toBeNull();
   });
   it('quarantines conflicting views without erasing saved faces',()=>{
     const scanner=new CubeScanner(),s=state(applyMoves(SOLVED,scramble));

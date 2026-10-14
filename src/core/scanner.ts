@@ -1,19 +1,15 @@
-import { CubeColor, CubeObservation, CubeState, FACES, Face, FaceGrid, CenterMap, ObservedFace } from './types';
-import { edgeToward, rotateGrid, rotationsMatching, validateCube } from './cube';
+import { CubeColor, CubeObservation, CubeState, FaceGrid, ObservedFace } from './types';
+import { rotateGrid, rotationsMatching } from './cube';
+import {assembleScan,AssemblyInput,EdgeConstraint,ScanAssembly} from './assembleScan';
 import { sharedEdge } from './geometry';
 import { physicalFrameGapMs } from './timing';
 import { FaceEvidence } from './faceEvidence';
 
 type StoredFace={grid:FaceGrid<CubeColor>;quality:number;confirmedAt:number};
-type EdgeConstraint={a:CubeColor;b:CubeColor;aEdges:number[];bEdges:number[]};
-export type ScanProgress={captured:CubeColor[];rechecking:CubeColor[];message:string;state?:CubeState;invalidated?:boolean};
+export type ScanProgress={captured:CubeColor[];rechecking:CubeColor[];phase:'capturing'|'checking'|'connecting'|'rechecking'|'ready';message:string;state?:CubeState;invalidated?:boolean};
 const signature=(g:readonly CubeColor[])=>[0,1,2,3].map(r=>rotateGrid(g,r).join(',')).sort()[0]!;
 const canonical=(g:FaceGrid<CubeColor>)=>[0,1,2,3].map(r=>rotateGrid(g,r)).sort((a,b)=>a.join(',').localeCompare(b.join(',')))[0]!;
 export const reliableFace=(f:ObservedFace)=>f.confidence.every(c=>c>=0.65)&&f.glare<0.22&&f.sharpness>=18;
-function permutations<T>(items:T[]):T[][] {
-  if(!items.length) return [[]];
-  return items.flatMap((item,i)=>permutations(items.filter((_,j)=>i!==j)).map(rest=>[item,...rest]));
-}
 
 export class CubeScanner {
   private evidence=new FaceEvidence();
@@ -27,11 +23,32 @@ export class CubeScanner {
   private changedSince:number|undefined;
   private assemblyKey='';
   private assembledState:CubeState|undefined;
+  private assemblyPending=false;
+  private request=0;
   private lastTimestamp=-Infinity;
   private revision=0;
-  reset() {this.evidence.reset();this.faces.clear();this.pending.clear();this.edges=[];this.pendingEdges.clear();this.reacquired.clear();this.uncertain.clear();this.rechecking.clear();this.changedSince=undefined;this.assemblyKey='';this.assembledState=undefined;this.lastTimestamp=-Infinity;this.revision++;}
+  constructor(private background?:{assemble:(input:AssemblyInput)=>Promise<ScanAssembly>;complete:(result:ScanProgress)=>void;error:(error:unknown)=>void}){}
+  reset() {this.request++;this.assemblyPending=false;this.evidence.reset();this.faces.clear();this.pending.clear();this.edges=[];this.pendingEdges.clear();this.reacquired.clear();this.uncertain.clear();this.rechecking.clear();this.changedSince=undefined;this.assemblyKey='';this.assembledState=undefined;this.lastTimestamp=-Infinity;this.revision++;}
+  private progress(message:string,extra:Partial<ScanProgress>={}):ScanProgress {
+    const rechecking=[...new Set([...this.uncertain,...this.rechecking])];
+    const phase=extra.state?'ready':rechecking.length?'rechecking':this.faces.size<6?'capturing':this.assemblyPending?'checking':'connecting';
+    if(phase==='checking')message='All six faces are saved. Matching the pieces to build your cube…';
+    if(phase==='connecting'){
+      const connections=(c:CubeColor)=>this.edges.filter(e=>e.a===c||e.b===c).length;
+      const center=[...this.faces.keys()].sort((a,b)=>connections(a)-connections(b))[0]!;
+      message=`All six faces are saved. Show the ${center} center with a neighboring side visible, then pause. Keep the layers still.`;
+    }
+    if(phase==='rechecking')message=`Your saved faces are kept. Show the ${rechecking[0]} center and pause so I can check its colors.`;
+    return {captured:[...this.faces.keys()],rechecking,phase,message,...extra};
+  }
+  private completed(assembled:ScanAssembly):ScanProgress {
+    this.assemblyPending=false;this.assembledState=assembled.state;
+    if(assembled.state)return this.progress('Cube captured.',{state:assembled.state});
+    if(assembled.invalid)return this.progress(this.reacquire([...this.faces.keys()]));
+    return this.progress('');
+  }
   observe(o:CubeObservation):ScanProgress {
-    const result=(message:string,extra:Partial<ScanProgress>={}):ScanProgress=>({captured:[...this.faces.keys()],rechecking:[...new Set([...this.uncertain,...this.rechecking])],message,...extra});
+    const result=(message:string,extra:Partial<ScanProgress>={})=>this.progress(message,extra);
     if(o.timestamp<=this.lastTimestamp) return result('Rotate the whole cube slowly.');
     this.lastTimestamp=o.timestamp;
     const measured=this.evidence.observe(o);
@@ -57,7 +74,7 @@ export class CubeScanner {
       const matches=stored&&rotationsMatching(face.colors,stored.grid).length>0;
       // Keep the saved view while checking a conflicting reading. Never solve
       // through an unresolved conflict, even if that face leaves the camera.
-      if(stored&&!matches)this.uncertain.add(center);
+      if(stored&&!matches){this.uncertain.add(center);this.assemblyKey='';this.assembledState=undefined;}
       if(p.count<3 || o.timestamp-p.since<220) continue;
       if(stored&&!matches) {
         // A short run of misclassified colors used to erase the entire scan.
@@ -113,13 +130,26 @@ export class CubeScanner {
       return result(this.reacquire([...this.faces].filter(([,f])=>f.grid.some(c=>(counts.get(c)??0)>9)).map(([c])=>c)));
     }
     const key=JSON.stringify([[...this.faces].map(([color,face])=>[color,face.grid]),this.edges]);
+    if(this.assemblyPending)return result('');
     if(key===this.assemblyKey)return this.assembledState?result('Cube captured.',{state:this.assembledState}):result('Tilt the cube to show two neighboring faces together.');
     this.assemblyKey=key;
-    const assembled=this.assemble();
-    this.assembledState=assembled.state;
-    if(assembled.state) return result('Cube captured.',{state:assembled.state});
-    if(assembled.invalid)return result(this.reacquire([...this.faces.keys()]));
-    return result('Tilt the cube to show two neighboring faces together.');
+    const input:AssemblyInput={grids:[...this.faces].map(([c,f])=>[c,f.grid]),edges:[...this.edges],revision:this.revision};
+    if(this.background){
+      const request=++this.request;this.assemblyPending=true;
+      void this.background.assemble(input).then(assembled=>{
+        if(request!==this.request)return;
+        this.assemblyPending=false;
+        const currentKey=JSON.stringify([[...this.faces].map(([color,face])=>[color,face.grid]),this.edges]);
+        if(key!==this.assemblyKey||key!==currentKey||this.uncertain.size||this.rechecking.size){this.assemblyKey='';return;}
+        this.background!.complete(this.completed(assembled));
+      },error=>{
+        if(request!==this.request)return;
+        this.assemblyPending=false;
+        if(key===this.assemblyKey)this.background!.error(error);
+      });
+      return result('');
+    }
+    return this.completed(assembleScan(new Map(input.grids),input.edges,input.revision));
   }
   private reacquire(candidates:CubeColor[]):string {
     let available=candidates.filter(c=>!this.reacquired.has(c));
@@ -129,36 +159,5 @@ export class CubeScanner {
     this.reacquired.add(suspect);this.faces.delete(suspect);this.pending.delete(suspect);this.pendingEdges.clear();
     this.edges=this.edges.filter(e=>e.a!==suspect&&e.b!==suspect);this.assemblyKey='';this.assembledState=undefined;
     return `Show the ${suspect} center again. One view didn’t agree.`;
-  }
-  private assemble():{state?:CubeState;invalid?:boolean} {
-    const first=this.edges[0];
-    if(!first) return {};
-    const remaining=[...this.faces.keys()].filter(c=>c!==first.a&&c!==first.b);
-    const states=new Map<string,CubeState>();
-    // The first observed adjacent centers define an internal U/F reference. No physical orientation is prescribed.
-    for(const other of permutations(remaining)) {
-      const centers:CenterMap={U:first.a,F:first.b,R:other[0]!,D:other[1]!,L:other[2]!,B:other[3]!};
-      const inverse=Object.fromEntries(FACES.map(f=>[centers[f],f])) as Record<CubeColor,Face>;
-      const allowed=Object.fromEntries(FACES.map(f=>[f,[0,1,2,3]])) as Record<Face,number[]>;
-      let valid=true;
-      for(const e of this.edges) {
-        const a=inverse[e.a],b=inverse[e.b],ea=edgeToward(a,b),eb=edgeToward(b,a);
-        if(ea===null || eb===null) {valid=false;break;}
-        allowed[a]=allowed[a].filter(r=>e.aEdges.some(i=>(i+r)%4===ea));
-        allowed[b]=allowed[b].filter(r=>e.bEdges.some(i=>(i+r)%4===eb));
-        if(!allowed[a].length || !allowed[b].length) {valid=false;break;}
-      }
-      if(!valid) continue;
-      const build=(i:number,facelets:string)=>{
-        if(states.size>1)return;
-        if(i===6) { if(validateCube(facelets).valid) states.set(facelets,{facelets,centers,revision:this.revision}); return; }
-        const f=FACES[i]!,grid=this.faces.get(centers[f])!.grid;
-        const variants=new Set(allowed[f].map(r=>rotateGrid(grid,r).map(c=>inverse[c]).join('')));
-        for(const variant of variants) build(i+1,facelets+variant);
-      };
-      build(0,'');
-      if(states.size>1) return {};
-    }
-    return states.size===1?{state:[...states.values()][0]!}:{invalid:true};
   }
 }

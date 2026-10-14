@@ -1,6 +1,20 @@
 # Prototype validation record
 
-Updated October 12, 2026 (America/Toronto). **Physical acceptance remains incomplete.** The latest user-reported physical trial captured approximately two faces and failed to complete. No Android/iPhone models or OS versions have been confirmed and no recording of that physical failure has been collected. The requested 9/10 capture and solve rates, one-second p95 turn confirmation, and zero false confirmations are unmeasured.
+Updated October 14, 2026 (America/Toronto). **Physical acceptance remains incomplete.** The latest user-reported real-cube trial reached six captured faces but did not open a solution. The missing handoff was reproduced with six individual face observations. No Android/iPhone models or OS versions have been confirmed. The requested 9/10 capture and solve rates, one-second p95 turn confirmation, and zero false confirmations are unmeasured.
+
+## October 14: six-face capture to solution
+
+The scanner previously returned no reconstruction unless it had observed an adjacent pair. Six individually saved faces could therefore leave the interface at 6/6 indefinitely. It now searches center arrangements and face rotations, prunes impossible or repeated pieces, and checks full orientation and permutation parity. A unique physical reconstruction, modulo whole-cube rotation, proceeds to the solver. It does not assume a standard center scheme, fixed face order, or white-on-top orientation. Six uniform faces require no moves and still go through fresh solved-state verification.
+
+Reconstruction runs in the browser solver worker or native background runtime. Only one reconstruction is in flight; results are discarded after reset, contradictory colors, or changed adjacency constraints. Timeouts and worker failures produce an error with retry instead of a silent wait. A content-derived solver-worker URL prevents an older cached worker from ignoring the new reconstruction request.
+
+All saved faces remain visible during checking. When more than one physical arrangement remains possible, the interface explicitly says “Six faces saved. One more angle.” and names a center to show together with a neighbor. This instruction survives blurry or missing frames. The existing freely draggable 3D guide and Previous/Replay/Next controls are preserved.
+
+Validation: all 159 tests pass (151 public tests plus eight private screen-picture replays), including 24 deterministic scramble/orientation/center-scheme cases, six isolated faces entering a verified solution, ambiguity recovery through neighboring views, impossible-piece rejection, stale reconstruction results, and background errors. Strict TypeScript and the production web export pass. A generated browser MediaStream with six separate faces reaches the 32-quarter-turn guide through the real camera component, detector, session, reconstruction worker, and solver. Next advances the model at 390 CSS pixels. A second generated case retains 6/6 and shows the specific extra-angle instruction. No browser console errors were observed. Evidence remains local in `artifacts/six-face-guide.png` and `artifacts/six-face-extra-angle.png`.
+
+The ambiguous generated case also opens a 25-quarter-turn guide after neighboring views, without discarding its saved faces (`artifacts/six-face-ambiguity-resolved.png`). Sequential iOS/Android Hermes exports pass; no installed native binary or native runtime trial is claimed.
+
+These replays verify the handoff and UI, not real-camera detection reliability. The new release still needs a physical-phone retest. No detector thresholds, WASM, or native C++ changes were made; detector version remains `edf9e169743a5c96`.
 
 ## October 12: physical capture evidence and detail
 
@@ -22,7 +36,7 @@ Published browser build: https://point-scan-solve-10xdevv--k4m753isvb.expo.app (
 | --- | --- | --- |
 | TypeScript | Pass | `tsc --noEmit`, strict project settings |
 | Expo configuration/dependencies | 21/21 pass | `artifacts/build-logs/expo-doctor.log` |
-| Automated tests | 150/150 pass | October 12 capture correction; 142 public tests plus eight private screenshot replays. Includes actual worker dispatch, per-square capture evidence, camera color variation, capture cadence, cube invariants, solve verification, and wrong/obscured turn rejection. |
+| Automated tests | 159/159 pass | October 14 capture handoff; 151 public tests plus eight private screenshot replays. Includes reconstruction without adjacent views, ambiguity/stale-result checks, actual worker dispatch, per-square capture evidence, camera color variation, capture cadence, cube invariants, solve verification, and wrong/obscured turn rejection. |
 | Cube model and solver | Pass | All 18 legal turns compared with cubejs, inverse/invariant tests, 20 randomized solutions applied and verified |
 | Capture and tracking | Pass on synthetic observations | Arbitrary views, adjacency/orientation assembly, invalid state reacquisition, layer-change invalidation, wrong turns, ambiguity, stale results, and fresh six-face completion. Completion rejects a hidden last-face turn and discards earlier checks after blur or a frame gap. |
 | Compiled detector integration | Pass on synthetic pixels | Production C++/OpenCV WASM detects all three faces in four differently oriented views, reconstructs a known scramble, and identifies correct and alternative settled turns |

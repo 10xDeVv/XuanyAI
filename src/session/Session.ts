@@ -1,4 +1,4 @@
-import { CubeScanner, reliableFace } from '../core/scanner';
+import { CubeScanner, reliableFace, ScanProgress } from '../core/scanner';
 import { CubeTracker, matchObservation } from '../core/tracker';
 import { SOLVED,validateCube } from '../core/cube';
 import { CubeObservation,CubeState,Move,FacePose,CubeColor,SolverAdapter,SolutionPlan,FACES,COLORS } from '../core/types';
@@ -9,6 +9,7 @@ import {physicalFrameGapMs} from '../core/timing';
 export type Stage='setup'|'scanning'|'picture'|'planning'|'guiding'|'recovering'|'verifying'|'solved'|'error';
 export type SessionView={
   stage:Stage; message:string; captured:CubeColor[]; rechecking?:CubeColor[]; cube?:CubeState;
+  scanPhase?:ScanProgress['phase'];
   nextMove?:Move; poses:FacePose[]; observation?:CubeObservation;
   movesDone:number; movesRemaining:number; corrections:number;
   confirmedAt:number; startedAt:number; elapsedMs:number;
@@ -18,7 +19,7 @@ export type SessionView={
 const initial=():SessionView=>({stage:'setup',message:'Your cube. One turn at a time.',captured:[],poses:[],movesDone:0,movesRemaining:0,corrections:0,confirmedAt:0,startedAt:0,elapsedMs:0});
 export class Session {
   private view=initial();
-  private scanner=new CubeScanner();
+  private scanner:CubeScanner;
   private diagram=new DiagramScanner();
   private captureMode:'auto'|'diagram'='auto';
   private tracker=new CubeTracker();
@@ -31,7 +32,16 @@ export class Session {
   private lastObserved=-Infinity;
   private lastProcessingMs=0;
   private previewOnly=false;
-  constructor(private solver:SolverAdapter){}
+  constructor(private solver:SolverAdapter){
+    this.scanner=new CubeScanner(solver.assemble?{
+      assemble:input=>solver.assemble!(input),complete:scan=>{if(this.view.stage==='scanning')this.scanProgress(scan);},
+      error:error=>{if(this.view.stage==='scanning')this.cameraError(error instanceof Error?error.message:'The cube check could not finish. Please try again.');},
+    }:undefined);
+  }
+  private scanProgress(scan:ScanProgress){
+    this.update({captured:scan.captured,rechecking:scan.rechecking,scanPhase:scan.phase,message:scan.message,...(scan.captured.length>this.view.captured.length?{confirmedAt:Date.now()}:{})});
+    if(scan.state)void this.plan(scan.state);
+  }
   subscribe=(listener:()=>void)=>{this.listeners.add(listener);return ()=>{this.listeners.delete(listener);};};
   getSnapshot=()=>this.view;
   private update(patch:Partial<SessionView>){this.view={...this.view,...patch};for(const listener of this.listeners)listener();}
@@ -73,8 +83,7 @@ export class Session {
         this.update({message:o.largerGrid?'Use a 3 × 3 cube. Keep other grids outside the camera view.':'Extra grids are in view. Hold the cube against a plain background.'});return;
       }
       this.update({diagramCount:undefined});
-      const scan=this.scanner.observe(o);this.update({captured:scan.captured,rechecking:scan.rechecking,message:scan.message,...(scan.captured.length>this.view.captured.length?{confirmedAt:Date.now()}:{})});
-      if(scan.state)void this.plan(scan.state);
+      this.scanProgress(this.scanner.observe(o));
       return;
     }
     if(this.view.stage==='planning')return;
@@ -135,5 +144,5 @@ export class Session {
       else this.update({stage:'guiding',message:'Hold the cube still, with two sides visible.'});
     } catch(e){if(epoch===this.epoch)this.cameraError(e instanceof Error?e.message:'The solver could not start.');}
   }
-  dispose(){this.epoch++;this.solver.dispose();this.listeners.clear();}
+  dispose(){this.epoch++;this.scanner.reset();this.solver.dispose();this.listeners.clear();}
 }

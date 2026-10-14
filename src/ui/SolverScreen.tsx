@@ -56,20 +56,22 @@ export default function SolverScreen(){
   const active=!!session&&!setup&&!solved&&!error&&!paused&&stage!=='picture'&&!photo&&!(modelMode&&view.solution);
   const diagram=view.diagramCount!==undefined;
   const checking=diagram&&view.diagramConfirmations!==undefined;
+  const matching=stage==='scanning'&&!diagram&&view.scanPhase==='checking';
+  const connecting=stage==='scanning'&&!diagram&&view.scanPhase==='connecting';
   const compact=!wide&&!setup&&!solved;
   const modelAvailable=!!view.solution&&['guiding','recovering','verifying','solved'].includes(stage)&&!paused;
   const showModel=modelAvailable&&modelMode;
   const target=view.nextMove?.[0] as Face|undefined;
   const targetVisible=target&&view.poses.some(p=>p.face===target);
   const hidden=stage==='guiding'&&target&&!targetVisible;
-  const textContext=`${error?'error':stage==='guiding'||stage==='recovering'?'solving':stage}:${view.cube?.revision??0}:${paused}:${diagram}`;
+  const textContext=`${error?'error':stage==='guiding'||stage==='recovering'?'solving':stage}:${view.cube?.revision??0}:${paused}:${diagram}:${view.scanPhase}`;
   const instruction=useReadableMessage(JSON.stringify([
-    error?'Let’s try that again':setup?'Ready when you are':solved?'Every side. Solved.':stage==='scanning'?(diagram?'Point at the whole picture.':'Getting to know your cube'):stage==='planning'?'A little thinking…':stage==='recovering'?'Let’s get a clearer view':stage==='verifying'?'The finishing touch':hidden?'Bring the next face into view':'One turn closer.',
+    error?'Let’s try that again':setup?'Ready when you are':solved?'Every side. Solved.':stage==='scanning'?(diagram?'Point at the whole picture.':matching?'Building your cube…':connecting?'Six faces saved. One more angle.':'Getting to know your cube'):stage==='planning'?'Finding your solution…':stage==='recovering'?'Let’s get a clearer view':stage==='verifying'?'The finishing touch':hidden?'Bring the next face into view':'One turn closer.',
     localError??(hidden?'Rotate the whole cube to show this center.':view.message)
   ]),textContext);
   const [phase,message]=JSON.parse(instruction) as [string,string];
   const visibleSaved=stage==='scanning'&&!diagram&&!!view.observation?.faces.length&&view.observation.faces.every(f=>view.captured.includes(f.colors[4])&&!view.rechecking?.includes(f.colors[4]));
-  const cameraStatus=useReadableMessage(visibleSaved?'Faces saved · Rotate the whole cube':status,`${active}:${facing}:${diagram}`);
+  const cameraStatus=useReadableMessage(matching?'Six faces saved · Matching pieces':connecting?'Show two neighboring sides together':visibleSaved?'Faces saved · Rotate the whole cube':status,`${active}:${facing}:${diagram}:${view.scanPhase}`);
   const minutes=Math.floor(view.elapsedMs/60000),seconds=Math.floor(view.elapsedMs/1000)%60;
   return <SafeAreaView style={s.page}>
     <ScrollView ref={scroll} contentContainerStyle={[s.shell,wide&&{paddingHorizontal:56},compact&&{paddingHorizontal:14}]}>
@@ -105,7 +107,7 @@ export default function SolverScreen(){
           <Text accessibilityLiveRegion="polite" style={[s.panelBody,compact&&{marginTop:6}]}>{error?message:setup?'Prop up your phone, grab your cube, and let’s untangle it together. We’ll show you exactly what to turn.':paused?'Resume when you’re ready. We’ll take a fresh look at your cube.':message}</Text>
           {hidden&&view.cube&&target&&<View style={s.reveal}><View style={[s.centerSwatch,{backgroundColor:COLOR_HEX[view.cube.centers[target]]}]}/><View><Text style={s.revealTitle}>Show this center</Text><Text style={s.revealBody}>Move the whole cube, keeping layers still.</Text></View></View>}
           {(setup||stage==='scanning')&&<View style={[s.scanProgress,compact&&{marginTop:12,paddingTop:12}]}><View style={s.progressHeader}><Text style={s.progressLabel}>{diagram?(checking?'MATCHING VIEWS':'CLEAR PANELS IN VIEW'):'FACES CAPTURED'}</Text><Text style={s.progressCount}>{diagram?(view.diagramConfirmations??view.diagramCount):view.captured.length}<Text style={{color:'#A1A99D'}}> / {checking?4:6}</Text></Text></View>{diagram?<Text style={s.scanHint}>Keep all six faces in view. Brief dropouts won’t erase matching views.</Text>:<><View style={[s.faces,compact&&{marginTop:10}]}>{COLORS.map(c=><View key={c} accessibilityLabel={`${c} face ${view.rechecking?.includes(c)?'needs a check':view.captured.includes(c)?'captured':'not captured'}`} style={[s.faceDot,compact&&{width:25,height:25,borderRadius:6},{backgroundColor:COLOR_HEX[c],opacity:view.captured.includes(c)?1:.28}]}>{view.captured.includes(c)&&<Text style={s.faceCheck}>{view.rechecking?.includes(c)?'?':'✓'}</Text>}</View>)}</View><Text style={s.scanHint}>{view.rechecking?.length?'Saved views are kept. A ? marks a face that needs another look.':setup?'We’ll pick these up as you rotate.':'Faces stay saved as you rotate. Keep the layers still.'}</Text></>}</View>}
-          {stage==='planning'&&<View style={s.thinking}><ActivityIndicator color={ink}/><Text style={s.scanHint}>Working on your device</Text></View>}
+          {(stage==='planning'||matching)&&<View style={s.thinking}><ActivityIndicator color={ink}/><Text style={s.scanHint}>Working on your device</Text></View>}
           {!compact&&!setup&&!['scanning','error','planning'].includes(stage)&&<View style={s.stats}><View><Text style={s.statValue}>{solved?`${minutes}:${String(seconds).padStart(2,'0')}`:String(view.movesDone).padStart(2,'0')}</Text><Text style={s.statLabel}>{solved?'YOUR SOLVE TIME':'TURNS MADE'}</Text></View><View style={s.statDivider}/><View><Text style={s.statValue}>{solved?view.movesDone:view.movesRemaining}</Text><Text style={s.statLabel}>{solved?'TURNS TAKEN':'TURNS TO GO'}</Text></View></View>}
           <View style={{flex:1,minHeight:16}}/>
           {(setup||error||solved)?<Action label={error?'Try again':solved?'Solve another cube':'Let’s solve your cube'} onPress={()=>start()}/>:<Action label={paused?'Resume camera':'Pause for a moment'} secondary onPress={()=>{suspend();setPaused(p=>!p);}}/>}

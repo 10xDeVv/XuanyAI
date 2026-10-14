@@ -51,10 +51,10 @@ export function edgeToward(face: Face, neighbor: Face): number | null {
 }
 
 // Ordered facelets match Kociemba's URFDLB convention. Corner ordering encodes chirality.
-const cornerFacelets = [[8,9,20],[6,18,38],[0,36,47],[2,45,11],[29,26,15],[27,44,24],[33,53,42],[35,17,51]];
-const cornerColors = ['URF','UFL','ULB','UBR','DFR','DLF','DBL','DRB'];
-const edgeFacelets = [[5,10],[7,19],[3,37],[1,46],[32,16],[28,25],[30,43],[34,52],[23,12],[21,41],[50,39],[48,14]];
-const edgeColors = ['UR','UF','UL','UB','DR','DF','DL','DB','FR','FL','BL','BR'];
+export const cornerFacelets = [[8,9,20],[6,18,38],[0,36,47],[2,45,11],[29,26,15],[27,44,24],[33,53,42],[35,17,51]];
+export const cornerColors = ['URF','UFL','ULB','UBR','DFR','DLF','DBL','DRB'];
+export const edgeFacelets = [[5,10],[7,19],[3,37],[1,46],[32,16],[28,25],[30,43],[34,52],[23,12],[21,41],[50,39],[48,14]];
+export const edgeColors = ['UR','UF','UL','UB','DR','DF','DL','DB','FR','FL','BL','BR'];
 const parity = (p: number[]) => p.reduce((sum,x,i)=>sum+p.slice(i+1).filter(y=>y<x).length,0)%2;
 export type Validation = {valid:true} | {valid:false; reason:string};
 export function validateCube(s: string): Validation {

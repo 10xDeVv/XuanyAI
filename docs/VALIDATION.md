@@ -16,6 +16,8 @@ The ambiguous generated case also opens a 25-quarter-turn guide after neighborin
 
 These replays verify the handoff and UI, not real-camera detection reliability. The new release still needs a physical-phone retest. No detector thresholds, WASM, or native C++ changes were made; detector version remains `edf9e169743a5c96`.
 
+Published fix: https://point-scan-solve-10xdevv--ylg4a1bsof.expo.app (source `e3d7db4`), also available on https://point-scan-solve-10xdevv--prototype.expo.app. Both application bundles and the hosted camera/solver assets match the final tested export byte-for-byte. The published home page loads without console errors. Solver-worker version: `ea2405dd80710172`.
+
 ## October 12: physical capture evidence and detail
 
 Physical frames now retain up to 960 pixels on the long side (previously 640), without upscaling. Native output requests 960×720 and disables preview-sized buffers so a small UI preview cannot silently limit detector input. Its C++ buffer bound is also 960; installed native builds require rebuilding to receive this change. Picture mode remains at 1280. Frame deadlines and single-request processing are unchanged. Phone processing latency at the higher resolution is unmeasured.

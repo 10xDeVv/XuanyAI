@@ -63,7 +63,7 @@ export class CubeScanner {
       this.pendingEdges.clear();
       if(o.faces.some(f=>f.glare>=.22))return result('Tilt the cube away from the light so the colors are clear.');
       if(o.faces.some(f=>f.sharpness<18))return result('Hold still a little farther from the camera so the squares can focus.');
-      if(o.faces.length||o.diagnostics?.grids)return result('The colors aren’t clear yet. Try even light or switch to the back camera.');
+      if(o.faces.length||o.diagnostics?.grids)return result('The colors aren’t clear yet. Face the cube toward even light and keep it centered in the camera.');
       return result('Show one complete 3 × 3 face first. Keep fingers off the squares and pause.');
     }
     let invalidated=false;

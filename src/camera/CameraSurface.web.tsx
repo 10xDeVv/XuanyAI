@@ -4,7 +4,7 @@ import { CubeObservation } from '../core/types';
 import { reliableFace } from '../core/scanner';
 import { clearDiagramFace } from '../photo/model';
 import { VISION_VERSION } from './visionVersion';
-import { cameraFrameSize } from './frameSize';
+import { cameraDetailRegion,cameraFrameSize } from './frameSize';
 
 export default function CameraSurface(props:CameraSurfaceProps){
   const video=useRef<HTMLVideoElement>(null),callbacks=useRef(props);callbacks.current=props;
@@ -27,6 +27,7 @@ export default function CameraSurface(props:CameraSurfaceProps){
     let cancelled=false,stream:MediaStream|undefined,worker:Worker|undefined,busy=false,ready=false,timer:ReturnType<typeof setInterval>|undefined;
     let sequence=0,pending=0,lastFrame=-1,frameEpoch=0,pendingEpoch=0,watchdog:ReturnType<typeof setTimeout>|undefined;
     const canvas=document.createElement('canvas'),context=canvas.getContext('2d',{willReadFrequently:true});
+    const detailCanvas=document.createElement('canvas'),detailContext=detailCanvas.getContext('2d',{willReadFrequently:true});
     const fail=(message:string)=>{if(!cancelled)callbacks.current.onError(message);};
     const release=()=>{stream?.getTracks().forEach(t=>t.stop());stream=undefined;};
     const init=async()=>{
@@ -52,7 +53,7 @@ export default function CameraSurface(props:CameraSurfaceProps){
           if(data.type==='observation'&&data.id===pending){
             busy=false;clearTimeout(watchdog);
             if(document.hidden||pendingEpoch!==frameEpoch)return;
-            if(performance.now()-data.timestamp>(callbacks.current.picture?2000:1000)){callbacks.current.onStatus('Scanning is too slow. Try the back camera with a plain background.');return;}
+            if(performance.now()-data.timestamp>(callbacks.current.picture?2000:1000)){callbacks.current.onStatus('Scanning is too slow. Use even light and a plain background.');return;}
             const rect=element.getBoundingClientRect();
             const count=data.faces.filter((f:CubeObservation['faces'][number])=>data.faces.length>3?clearDiagramFace(f):reliableFace(f)).length;
             callbacks.current.onStatus(data.largerGrid?'Use a 3 × 3 cube diagram':callbacks.current.picture?'Checking the picture · Hold steady':count?`${count} clear face${count===1?'':'s'} in view · Hold still`:data.faces.length?'Grid found · Adjust the light':'Looking for a 3 × 3 face');
@@ -69,10 +70,22 @@ export default function CameraSurface(props:CameraSurfaceProps){
           try{
             context.drawImage(element,0,0,width,height);
             const data=context.getImageData(0,0,width,height),id=++sequence;
+            const region=cameraDetailRegion(element.videoWidth,element.videoHeight,callbacks.current.picture);
+            let detail: {buffer:ArrayBufferLike;width:number;height:number;x:number;y:number;scaleX:number;scaleY:number}|undefined;
+            const transfer:Transferable[]=[data.data.buffer];
+            if(region&&detailContext){
+              if(detailCanvas.width!==region.width||detailCanvas.height!==region.height){detailCanvas.width=region.width;detailCanvas.height=region.height;}
+              detailContext.drawImage(element,region.x,region.y,region.size,region.size,0,0,region.width,region.height);
+              const pixels=detailContext.getImageData(0,0,region.width,region.height);
+              detail={buffer:pixels.data.buffer,width:region.width,height:region.height,
+                x:region.x*width/element.videoWidth,y:region.y*height/element.videoHeight,
+                scaleX:region.size/region.width*width/element.videoWidth,scaleY:region.size/region.height*height/element.videoHeight};
+              transfer.push(pixels.data.buffer);
+            }
             pending=id;pendingEpoch=frameEpoch;busy=true;
             watchdog=setTimeout(()=>fail('Camera processing stopped responding. Try again.'),10000);
-            worker!.postMessage({type:'frame',id,width,height,picture:!!callbacks.current.picture,timestamp:performance.now(),buffer:data.data.buffer},[data.data.buffer]);
-          }catch(error){busy=false;clearTimeout(watchdog);fail('Could not read camera frames. Restart the camera or try Safari.');}
+            worker!.postMessage({type:'frame',id,width,height,detail,picture:!!callbacks.current.picture,timestamp:performance.now(),buffer:data.data.buffer},transfer);
+          }catch(error){busy=false;clearTimeout(watchdog);fail('Could not read camera frames. Restart the camera or try another browser.');}
         },100);
       }catch(error){
         release();const e=error as Error;

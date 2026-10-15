@@ -11,6 +11,7 @@
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "benchmark:solver": "node scripts/benchmark-solver.mjs",
     "build:workers": "node scripts/build-workers.mjs",
     "build:vision": "python scripts/build-vision.py",
     "build:web": "node scripts/check-vision.mjs && npm run build:workers && expo export --platform web",

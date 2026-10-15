@@ -16,6 +16,29 @@ namespace cubevision {
 using P=cv::Point2f;
 using Q=std::array<P,4>;
 struct Cell {Q q;P center;double area;};
+// Search only the x range intersecting a candidate sticker. Cluttered webcam
+// frames otherwise compare every lattice point with every room/background
+// contour thousands of times. Preserve the original nearest/tie semantics.
+struct CellIndex {
+  const std::vector<Cell>& cells;
+  std::vector<int> ordered;
+  explicit CellIndex(const std::vector<Cell>& values):cells(values){
+    for(size_t i=0;i<cells.size();i++)ordered.push_back(int(i));
+    std::sort(ordered.begin(),ordered.end(),[&](int a,int b){return cells[a].center.x<cells[b].center.x;});
+  }
+  int nearest(P p,double radius,double area,double minRatio,double maxRatio,const std::set<int>& used)const{
+    if(!std::isfinite(p.x)||!std::isfinite(p.y))return -1;
+    auto it=std::lower_bound(ordered.begin(),ordered.end(),p.x-radius,[&](int i,double x){return cells[i].center.x<x;});
+    int chosen=-1;double best=radius*radius;
+    for(;it!=ordered.end()&&cells[*it].center.x<=p.x+radius;++it){
+      const auto& c=cells[*it];const double ratio=c.area/area;
+      if(ratio<minRatio||ratio>maxRatio)continue;
+      const double dx=double(c.center.x)-p.x,dy=double(c.center.y)-p.y,d=dx*dx+dy*dy;
+      if((d<best||(d==best&&chosen>=0&&*it<chosen))&&!used.count(*it)){best=d;chosen=*it;}
+    }
+    return chosen;
+  }
+};
 struct Face {Q q;std::array<int,9> colors;std::array<double,9> confidence;std::array<std::array<cv::Vec3b,81>,9> samples;double sharpness,glare,score;int cells;bool calibrated=false;};
 static const char* names[]={"white","red","green","yellow","orange","blue"};
 static P center(const Q&q) {return (q[0]+q[1]+q[2]+q[3])*0.25f;}
@@ -72,6 +95,35 @@ static bool sample(const cv::Mat& rgb,const cv::Mat& gray,const Q&q,Face& face,b
       if(px[2]>252&&px[1]<15)glaring++;
     }
     int best=int(std::max_element(counts.begin(),counts.end())-counts.begin()),i=row*3+col;
+    // A printed center logo can dominate the tiny middle sampling patch. Read
+    // the surrounding sticker only if all four sides independently establish
+    // white. Keep the measured samples/confidence; never assume the center is
+    // white just because the middle is mixed or covered.
+    if(!enhanced&&i==4){
+      std::array<cv::Vec3b,81> ring;std::array<int,4> whites{},totals{};
+      int k=0;
+      for(int radius:{12,14,16})for(int j=0;j<27;j++){
+        const double along=j*4./27;const int side=int(along);
+        const double t=(along-side)*2-1;
+        const int x=cvRound(75+(side==0?radius*t:side==1?radius:side==2?-radius*t:-radius));
+        const int y=cvRound(75+(side==0?-radius:side==1?radius*t:side==2?radius:-radius*t));
+        const auto px=hsv.at<cv::Vec3b>(y,x);ring[k++]=px;totals[side]++;
+        double certainty;if(classify(px,certainty)==0&&certainty>=.65)whites[side]++;
+      }
+      int totalWhite=0;bool whiteBorder=true;
+      for(int side=0;side<4;side++){totalWhite+=whites[side];if(whites[side]<totals[side]*.60)whiteBorder=false;}
+      whiteBorder=whiteBorder&&totalWhite>=81*.85;
+      if(whiteBorder&&counts[0]>=n*.35&&counts[0]<n*.90){
+        counts.fill(0);confidence.fill(0);face.samples[i]=ring;
+        for(const auto px:ring){double certainty;const int color=classify(px,certainty);counts[color]++;confidence[color]+=certainty;}
+        best=int(std::max_element(counts.begin(),counts.end())-counts.begin());
+      }
+      else if(counts[0]<n*.50&&totalWhite>=81*.30)return false;
+    }
+    // Mixed white/colored center evidence without an established white border
+    // may be a finger over the center. Do not let later hue calibration turn
+    // that obstruction into a confident new center color.
+    if(!enhanced&&i==4&&counts[0]>=n*.20&&counts[0]<=n*.80)return false;
     face.colors[i]=best;
     face.confidence[i]=(counts[best]/double(n))*(confidence[best]/std::max(1,counts[best]));
     if(face.confidence[i]<(enhanced?.35:.50))return false;
@@ -365,6 +417,7 @@ static std::string detectPass(const uint8_t* rgba,int width,int height,int strid
   // Retain enough regions to distinguish a 96-sticker 4x4 diagram from 3x3
   // windows, while keeping work bounded on cluttered camera frames.
   if(cells.size()>140)cells.resize(140);
+  const CellIndex cellIndex(cells);
   std::vector<Face> found;
   int gridCandidates=0;
   bool largerGrid=false;
@@ -427,11 +480,7 @@ static std::string detectPass(const uint8_t* rgba,int width,int height,int strid
       std::set<int> extra;
       for(int row=0;row<4;row++)for(int col=0;col<4;col++){
         const P target=project(h,float(col+dx)+.5f,float(row+dy)+.5f);
-        double best=std::sqrt(area)*.16;int chosen=-1;
-        for(size_t n=0;n<cells.size();n++){
-          const double ratio=cells[n].area/area;if(ratio<.55||ratio>1.8||extra.count(int(n)))continue;
-          const double d=cv::norm(target-cells[n].center);if(d<best){best=d;chosen=int(n);}
-        }
+        const int chosen=cellIndex.nearest(target,std::sqrt(area)*.16,area,.55,1.8,extra);
         if(chosen>=0)extra.insert(chosen);
       }
       if(extra.size()==16){largerGrid=true;return;}
@@ -474,11 +523,7 @@ static std::string detectPass(const uint8_t* rgba,int width,int height,int strid
       std::vector<P> src,dst;std::set<int> used;
       for(int k=0;k<9;k++){
         P p=seed.center+u*float(k%3-1)+v*float(k/3-1);
-        double best=scale*.38;int chosen=-1;
-        for(size_t n=0;n<cells.size();n++){
-          const double ratio=cells[n].area/seed.area;if(ratio<.3||ratio>3.3||used.count(int(n)))continue;
-          double d=cv::norm(p-cells[n].center);if(d<best){best=d;chosen=int(n);}
-        }
+        const int chosen=cellIndex.nearest(p,scale*.38,seed.area,.3,3.3,used);
         if(chosen<0)continue;
         used.insert(chosen);src.push_back({float(k%3)+.5f,float(k/3)+.5f});dst.push_back(cells[chosen].center);
       }
@@ -494,12 +539,7 @@ static std::string detectPass(const uint8_t* rgba,int width,int height,int strid
     std::vector<P> src,dst;std::set<int> used;
     for(int k=0;k<9;k++) {
       P p=project(h,float(k%3)+.5f,float(k/3)+.5f);
-      double tolerance=std::sqrt(seed.area)*.34,best=tolerance;int chosen=-1;
-      for(size_t n=0;n<cells.size();n++) {
-        if(cells[n].area/seed.area<.30||cells[n].area/seed.area>3.3)continue;
-        double d=cv::norm(p-cells[n].center);
-        if(d<best&&!used.count(int(n))){best=d;chosen=int(n);}
-      }
+      const int chosen=cellIndex.nearest(p,std::sqrt(seed.area)*.34,seed.area,.30,3.3,used);
       if(chosen>=0){used.insert(chosen);src.push_back({float(k%3)+.5f,float(k/3)+.5f});dst.push_back(cells[chosen].center);}
     }
     if(src.size()<(enhanced?5:7))continue;

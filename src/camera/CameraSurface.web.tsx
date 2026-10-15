@@ -4,7 +4,7 @@ import { CubeObservation } from '../core/types';
 import { reliableFace } from '../core/scanner';
 import { clearDiagramFace } from '../photo/model';
 import { VISION_VERSION } from './visionVersion';
-import { cameraDetailRegion,cameraFrameSize } from './frameSize';
+import { CameraProcessingBudget,cameraDetailRegion,cameraFrameSize } from './frameSize';
 
 export default function CameraSurface(props:CameraSurfaceProps){
   const video=useRef<HTMLVideoElement>(null),callbacks=useRef(props);callbacks.current=props;
@@ -26,6 +26,7 @@ export default function CameraSurface(props:CameraSurfaceProps){
     if(!props.active)return;
     let cancelled=false,stream:MediaStream|undefined,worker:Worker|undefined,busy=false,ready=false,timer:ReturnType<typeof setInterval>|undefined;
     let sequence=0,pending=0,lastFrame=-1,frameEpoch=0,pendingEpoch=0,watchdog:ReturnType<typeof setTimeout>|undefined;
+    const budget=new CameraProcessingBudget();let pendingPicture=false;
     const canvas=document.createElement('canvas'),context=canvas.getContext('2d',{willReadFrequently:true});
     const detailCanvas=document.createElement('canvas'),detailContext=detailCanvas.getContext('2d',{willReadFrequently:true});
     const fail=(message:string)=>{if(!cancelled)callbacks.current.onError(message);};
@@ -52,8 +53,9 @@ export default function CameraSurface(props:CameraSurfaceProps){
           if(data.type==='error'){busy=false;fail('Cube detector: '+data.message);return;}
           if(data.type==='observation'&&data.id===pending){
             busy=false;clearTimeout(watchdog);
-            if(document.hidden||pendingEpoch!==frameEpoch)return;
-            if(performance.now()-data.timestamp>(callbacks.current.picture?2000:1000)){callbacks.current.onStatus('Scanning is too slow. Use even light and a plain background.');return;}
+            if(document.hidden||pendingEpoch!==frameEpoch||pendingPicture!==!!callbacks.current.picture)return;
+            const elapsed=performance.now()-data.timestamp;budget.observe(elapsed,pendingPicture);
+            if(elapsed>(pendingPicture?2000:1000)){callbacks.current.onStatus('Adjusting camera processing · Keep the cube still');return;}
             const rect=element.getBoundingClientRect();
             const count=data.faces.filter((f:CubeObservation['faces'][number])=>data.faces.length>3?clearDiagramFace(f):reliableFace(f)).length;
             callbacks.current.onStatus(data.largerGrid?'Use a 3 × 3 cube diagram':callbacks.current.picture?'Checking the picture · Hold steady':count?`${count} clear face${count===1?'':'s'} in view · Hold still`:data.faces.length?'Grid found · Adjust the light':'Looking for a 3 × 3 face');
@@ -65,12 +67,13 @@ export default function CameraSurface(props:CameraSurfaceProps){
         timer=setInterval(()=>{
           if(!ready||busy||document.hidden||!context||element.readyState<2||!element.videoWidth)return;
           if(element.currentTime===lastFrame)return;lastFrame=element.currentTime;
-          const {width,height}=cameraFrameSize(element.videoWidth,element.videoHeight,callbacks.current.picture);
+          const {width,height}=cameraFrameSize(element.videoWidth,element.videoHeight,callbacks.current.picture,budget.limit);
           if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;}
           try{
+            const timestamp=performance.now();
             context.drawImage(element,0,0,width,height);
             const data=context.getImageData(0,0,width,height),id=++sequence;
-            const region=cameraDetailRegion(element.videoWidth,element.videoHeight,callbacks.current.picture);
+            const region=cameraDetailRegion(element.videoWidth,element.videoHeight,callbacks.current.picture,budget.limit);
             let detail: {buffer:ArrayBufferLike;width:number;height:number;x:number;y:number;scaleX:number;scaleY:number}|undefined;
             const transfer:Transferable[]=[data.data.buffer];
             if(region&&detailContext){
@@ -82,9 +85,9 @@ export default function CameraSurface(props:CameraSurfaceProps){
                 scaleX:region.size/region.width*width/element.videoWidth,scaleY:region.size/region.height*height/element.videoHeight};
               transfer.push(pixels.data.buffer);
             }
-            pending=id;pendingEpoch=frameEpoch;busy=true;
+            pending=id;pendingEpoch=frameEpoch;pendingPicture=!!callbacks.current.picture;busy=true;
             watchdog=setTimeout(()=>fail('Camera processing stopped responding. Try again.'),10000);
-            worker!.postMessage({type:'frame',id,width,height,detail,picture:!!callbacks.current.picture,timestamp:performance.now(),buffer:data.data.buffer},transfer);
+            worker!.postMessage({type:'frame',id,width,height,detail,picture:pendingPicture,timestamp,buffer:data.data.buffer},transfer);
           }catch(error){busy=false;clearTimeout(watchdog);fail('Could not read camera frames. Restart the camera or try another browser.');}
         },100);
       }catch(error){

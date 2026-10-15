@@ -51,7 +51,9 @@ PhysicalPaletteEvidence estimatePhysicalPalette(const SquareRange& squares,Physi
     if(deviation[std::min(deviation.size()-1,size_t(deviation.size()*.90))]>6)continue;
     colored.push_back(std::fmod(anchor+h+360.,360.));valid++;
   }
-  if(!white||colored.size()<5||valid<9)return PhysicalPaletteEvidence::incomplete;
+  // Six distinct measured references are sufficient. A logo or another noisy
+  // patch must not disable calibration of otherwise separable red/orange.
+  if(!white||colored.size()<5||valid<6)return PhysicalPaletteEvidence::incomplete;
   std::sort(colored.begin(),colored.end());
   // Cut the hue circle at its largest empty arc, then cluster with a maximum
   // diameter rather than merging a chain of increasingly different hues.
@@ -72,7 +74,7 @@ PhysicalPaletteEvidence estimatePhysicalPalette(const SquareRange& squares,Physi
   std::array<double,5> references;
   for(int i=0;i<5;i++)references[i]=std::fmod(physicalMedian(groups[i]),360.);
   for(int i=0;i<5;i++)for(int j=i+1;j<5;j++)
-    if(physicalHueDistance(references[i],references[j])<12)return PhysicalPaletteEvidence::ambiguous;
+    if(physicalHueDistance(references[i],references[j])<10)return PhysicalPaletteEvidence::ambiguous;
 
   const std::array<double,6> standard={0,0,130,56,26,220};
   std::array<int,5> permutation={1,2,3,4,5},best{};

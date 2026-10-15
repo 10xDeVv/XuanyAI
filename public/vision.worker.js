@@ -43,7 +43,10 @@ self.onmessage=async({data})=>{
     // pixels only when the full frame has no clear physical face. Never lower
     // quality thresholds or combine observations from the two views.
     const d=data.detail;
-    if(d&&!data.picture&&!result.largerGrid&&result.faces.length<=3&&!clearFaces(result)){
+    // Leave time to deliver the result. A slow full pass must not trigger
+    // another expensive pass that guarantees a stale observation; the camera
+    // adapts the next request's resolution using total elapsed time.
+    if(d&&!data.picture&&!result.largerGrid&&result.faces.length<=3&&!clearFaces(result)&&performance.now()-started<450){
       if(![d.x,d.y,d.scaleX,d.scaleY].every(Number.isFinite)||d.x<0||d.y<0||d.scaleX<=0||d.scaleY<=0||
         d.x+d.width*d.scaleX>data.width+.01||d.y+d.height*d.scaleY>data.height+.01)throw new Error('Invalid camera detail region.');
       const focused=readFrame(d.buffer,d.width,d.height);

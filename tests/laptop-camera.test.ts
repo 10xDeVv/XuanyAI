@@ -2,17 +2,17 @@ import {createRequire} from 'node:module';
 import {existsSync,readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import {describe,expect,it} from 'vitest';
-import {cameraDetailRegion,cameraFrameSize} from '../src/camera/frameSize';
+import {CameraProcessingBudget,cameraDetailRegion,cameraFrameSize} from '../src/camera/frameSize';
 import {CubeScanner,reliableFace} from '../src/core/scanner';
 import {matchObservation} from '../src/core/tracker';
 import {CubeObservation,FACES} from '../src/core/types';
 import {laptopCube,laptopFrame,sampleWebcam} from './laptop-fixtures';
 
 const require=createRequire(import.meta.url);
-async function worker(engine:any){
+async function worker(engine:any,clock=performance){
   const messages:any[]=[];
   const self={location:{href:'https://local.test/vision.worker.js?v=test'},postMessage:(m:unknown)=>messages.push(m),onmessage:undefined as unknown as (e:{data:unknown})=>Promise<void>};
-  runInNewContext(readFileSync('public/vision.worker.js','utf8'),{self,URL,performance,Uint8Array,importScripts:()=>{},createCubeVision:()=>engine});
+  runInNewContext(readFileSync('public/vision.worker.js','utf8'),{self,URL,performance:clock,Uint8Array,importScripts:()=>{},createCubeVision:()=>engine});
   await self.onmessage({data:{type:'init'}});expect(messages.pop()).toEqual({type:'ready'});
   return async(data:unknown)=>{await self.onmessage({data});return messages.pop();};
 }
@@ -24,6 +24,24 @@ it('samples landscape detail from native video pixels and leaves portrait/pictur
   expect(cameraDetailRegion(640,480)).toMatchObject({width:480,height:480});
   expect(cameraDetailRegion(720,1280)).toBeUndefined();
   expect(cameraDetailRegion(1280,720,true)).toBeUndefined();
+});
+
+it('reduces a slow physical workload without oscillating or reducing picture detail',()=>{
+  const budget=new CameraProcessingBudget();
+  budget.observe(2000,true);budget.observe(NaN);budget.observe(700);expect(budget.limit).toBe(960);
+  budget.observe(1100);expect(cameraFrameSize(1280,800,false,budget.limit)).toEqual({width:640,height:400});
+  expect(cameraDetailRegion(1280,800,false,budget.limit)).toMatchObject({width:640,height:640});
+  budget.observe(900);expect(budget.limit).toBe(480);
+  for(const duration of [1300,100,100,800])budget.observe(duration);
+  expect(budget.limit).toBe(480);expect(cameraFrameSize(1280,800,true,budget.limit)).toEqual({width:1280,height:800});
+});
+
+it('does not spend another detection pass after the first has used its retry allowance',async()=>{
+  let time=0,calls=0;
+  const engine={HEAPU8:new Uint8Array(64*64*4),_malloc:()=>16,_free:()=>{},detectRGBA:()=>{calls++;time+=500;return JSON.stringify({faces:[]});}};
+  const run=await worker(engine,{now:()=>time} as Performance),buffer=new ArrayBuffer(32*32*4);
+  const result=await run({type:'frame',id:1,timestamp:0,width:32,height:32,buffer,detail:{buffer,width:32,height:32,x:0,y:0,scaleX:1,scaleY:1}});
+  expect(calls).toBe(1);expect(result).toMatchObject({type:'observation',processingMs:500,timestamp:0});
 });
 
 describe.skipIf(!existsSync('public/vision/cube-vision.wasm'))('landscape webcam detection',()=>{

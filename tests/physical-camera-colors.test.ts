@@ -25,7 +25,7 @@ describe.skipIf(!existsSync('public/vision/cube-vision.wasm'))('physical camera 
     try {check((o,pixels)=>{const {frameWidth:w,frameHeight:h}=o.transform;engine.HEAPU8.set(pixels,ptr);return {...o,...JSON.parse(engine.detectRGBA(ptr,w,h,w*4))};});}
     finally {engine._free(ptr);}
   };
-  it.each([74,65])('uses measured colors when orange shifts toward red (G=%i) and white stays unchanged',async green=>{
+  it.each([74,65,50])('uses measured colors when orange shifts toward red (G=%i) and white stays unchanged',async green=>{
     await run(detect=>{
       for(const faces of [['F'],['F','R','U'],['R','B','D'],['F','L','U'],['L','B','D']] as Face[][]){
         const o=projected(cube,faces,0),pixels=recolor(renderObservation(o,{rounded:.20}),[241,116,24],[241,green,24]);
@@ -57,7 +57,7 @@ describe.skipIf(!existsSync('public/vision/cube-vision.wasm'))('physical camera 
       const pixels=missing==='orange'?recolor(original,[241,116,24],[214,33,37]):
         missing==='blue'?recolor(original,[25,78,205],[25,171,67]):
         missing==='white'?recolor(original,[232,233,223],[245,218,25]):
-        recolor(original,[241,116,24],missing==='near-boundary'?[241,50,24]:[230,38,32]);
+        recolor(original,[241,116,24],missing==='near-boundary'?[241,44,24]:[230,38,32]);
       const measured=detect(o,pixels);
       // The geometry remains observable; the missing sixth reference cannot be
       // manufactured by splitting one hue cluster or imposing cube counts.

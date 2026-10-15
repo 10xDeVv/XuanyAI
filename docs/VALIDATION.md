@@ -16,6 +16,8 @@ Validation: all 166 tests pass (158 public plus eight private screen-picture rep
 
 No detector, WASM, or native C++ changes were made. These checks do not replace a real-phone retest, and no installed native build/runtime test is claimed for this release.
 
+Published refinement: https://point-scan-solve-10xdevv--u4b1h9y09a.expo.app (source `9622b52`), also on https://point-scan-solve-10xdevv--prototype.expo.app. Both application bundles and the camera/solver assets match the tested export byte-for-byte; the published home page loads without console errors. Solver-worker version: `443aeafaf2e44ad0`.
+
 ## October 14: six-face capture to solution
 
 The scanner previously returned no reconstruction unless it had observed an adjacent pair. Six individually saved faces could therefore leave the interface at 6/6 indefinitely. It now searches center arrangements and face rotations, prunes impossible or repeated pieces, and checks full orientation and permutation parity. A unique physical reconstruction, modulo whole-cube rotation, proceeds to the solver. It does not assume a standard center scheme, fixed face order, or white-on-top orientation. Six uniform faces require no moves and still go through fresh solved-state verification.

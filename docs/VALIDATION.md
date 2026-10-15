@@ -12,6 +12,8 @@ All 177 tests pass (169 public plus eight private screen-picture replays). Seven
 
 A generated 1280×720 MediaStream at a 1366×768 browser viewport passes through the actual camera component, production worker/WASM, scanner, assembler, and solver, reaches 6/6, and opens a 12-quarter-turn 3D plan. Step navigation remains available and there are no browser console errors. Evidence: `artifacts/laptop-camera-guide.png`. Real laptop camera performance and the user's exact failure remain unverified pending a fresh trial or actual saved camera frame. Camera-worker asset version is `359a3d5749818ddb`; the C++/WASM binary and solver are unchanged.
 
+Published: https://point-scan-solve-10xdevv--9wv8pnbjdh.expo.app (source `d25844e`), also on https://point-scan-solve-10xdevv--prototype.expo.app. Both app bundles and the hosted worker/detector assets match the tested export byte-for-byte. The published desktop home page shows the webcam setup instructions and loads without console errors.
+
 ## October 14: bounded full-scramble improvement
 
 The full-scramble adapter now retains its verified Kociemba-plus-shortcuts result, then searches for improvements using all three choices of phase-two axis. It reuses cubejs's initialized move/pruning tables without changing the vendored runtime or adding a dependency. Alternatives are scored by the guide's actual 90-degree steps, including two steps for half turns. Every accepted alternative is mapped back to the input's coordinates and applied to verify a solved state. A plan is finalized before opening the guide; it never changes underneath a user stepping through it. The exact search for states within six quarter turns still bypasses this extra work.

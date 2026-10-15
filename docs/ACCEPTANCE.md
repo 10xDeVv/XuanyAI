@@ -18,6 +18,8 @@ Use ten different legal known scrambles. Vary which face appears first and the o
 
 ## Ten complete solves per platform
 
+Also start from an independently confirmed solved cube and make one or two known outer face turns. Scan fresh with a different first face and in-plane orientation. A single quarter turn must produce one 90-degree step; two quarter turns must need at most two, allowing cancellation. Half turns count as two 90-degree steps, so two half turns need at most four. Follow the displayed moves and confirm the physical cube is solved. Repeat with an already solved cube, which may require a three-sided view to establish its center orientation but must produce zero solution steps. Do not judge optimality from the step count unless the exact starting moves and state are recorded.
+
 Every trial includes one deliberate incorrect quarter turn, whose identity and time are labeled independently. Follow the remaining arrows. Record whether the wrong turn is identified and replanned without manual color input, whether recovery is needed, and whether the final physical cube is solved. Target: at least 9/10 full solves for each platform. Do not exclude inconvenient failures.
 
 For every settled turn, label the instant the layer stops moving and the instant the confirmation appears. Report nearest-rank p95 latency across all labeled settled turns; target ≤1,000 ms. Record false confirmations separately even if the solve later recovers. **Any false move confirmation or false solved declaration fails acceptance for that recording set.** A hidden/ambiguous turn must request a new angle, not guess.

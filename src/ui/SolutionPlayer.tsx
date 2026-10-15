@@ -46,7 +46,7 @@ export function SolutionPlayer({plan,onCamera,onStateChange}:{plan:SolutionPlan;
   };
   const busy=!!playback,finished=step===plan.moves.length;
   return <View style={s.player}>
-    <View style={s.heading}><Text style={s.kicker}>{finished?'STEPS COMPLETE':`STEP ${step+1} OF ${plan.moves.length}`}</Text><Text style={s.count}>{step} / {plan.moves.length} turns</Text></View>
+    <View style={s.heading}><Text style={s.kicker}>{finished?'STEPS COMPLETE':`STEP ${step+1} OF ${plan.moves.length}`}</Text><Text style={s.count}>{step} / {plan.moves.length} 90° turns</Text></View>
     <View style={s.track}><View style={[s.fill,{width:`${plan.moves.length?step/plan.moves.length*100:100}%`}]}/></View>
     <View style={s.instruction}>
       {face?<><View style={[s.swatch,{backgroundColor:COLOR_HEX[plan.state.centers[face]]}]}/><View style={{flex:1}}><Text accessibilityRole="header" style={s.title}>{FACE_NAMES[face]} face · {move!.endsWith("'")?'counterclockwise':'clockwise'}</Text><Text style={s.subtitle}>{plan.state.centers[face]} center · {move!.endsWith('2')?'half turn':'quarter turn'} · {playback?.kind==='previous'?'returning to the previous step':playback?.kind==='replay'?'preview only':busy?'moving to the next step':'highlighted on your cube'}</Text></View></>:<View><Text accessibilityRole="header" style={s.title}>Your model is solved.</Text><Text style={s.subtitle}>Check that your real cube matches on every side.</Text></View>}

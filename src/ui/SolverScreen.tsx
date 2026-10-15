@@ -71,7 +71,7 @@ export default function SolverScreen(){
   ]),textContext);
   const [phase,message]=JSON.parse(instruction) as [string,string];
   const visibleSaved=stage==='scanning'&&!diagram&&!!view.observation?.faces.length&&view.observation.faces.every(f=>view.captured.includes(f.colors[4])&&!view.rechecking?.includes(f.colors[4]));
-  const cameraStatus=useReadableMessage(matching?'Six faces saved · Matching pieces':connecting?'Show two neighboring sides together':visibleSaved?'Faces saved · Rotate the whole cube':status,`${active}:${facing}:${diagram}:${view.scanPhase}`);
+  const cameraStatus=useReadableMessage(matching?'Six faces saved · Matching pieces':connecting?'Tilt to show a corner of the cube':visibleSaved?'Faces saved · Rotate the whole cube':status,`${active}:${facing}:${diagram}:${view.scanPhase}`);
   const minutes=Math.floor(view.elapsedMs/60000),seconds=Math.floor(view.elapsedMs/1000)%60;
   return <SafeAreaView style={s.page}>
     <ScrollView ref={scroll} contentContainerStyle={[s.shell,wide&&{paddingHorizontal:56},compact&&{paddingHorizontal:14}]}>

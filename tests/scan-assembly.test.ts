@@ -61,7 +61,7 @@ it('keeps an explicit connecting instruction through blur and missing frames for
   const scanner=new CubeScanner(),s=state(applyMoves(SOLVED,['R']));let t=0,result;
   for(const f of FACES)for(let n=0;n<3;n++)result=scanner.observe(observation(s,[f],t+=150));
   expect(result!.captured).toHaveLength(6);expect(result!.state).toBeUndefined();
-  expect(result!.phase).toBe('connecting');expect(result!.message).toContain('neighboring side');
+  expect(result!.phase).toBe('connecting');expect(result!.message).toContain('three sides');
   const instruction=result!.message;
   for(const quality of ['blur','glare','missing'] as const){
     result=scanner.observe({...observation(s,[],t+=150),quality});

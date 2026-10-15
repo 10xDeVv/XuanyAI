@@ -1,10 +1,13 @@
-import {BASIS,SOLVED,cornerColors,cornerFacelets,edgeColors,edgeFacelets,edgeToward,rotateGrid,validateCube} from './cube';
+import {BASIS,cornerColors,cornerFacelets,edgeColors,edgeFacelets,edgeToward,rotateGrid,validateCube} from './cube';
 import {CenterMap,CubeColor,CubeState,Face,FaceGrid,FACES} from './types';
 
 export type EdgeConstraint={a:CubeColor;b:CubeColor;aEdges:number[];bEdges:number[]};
+// Relative order of two neighboring sides around the same visible face. This
+// preserves handedness even when a face's color pattern is rotationally symmetric.
+export type CornerConstraint={a:CubeColor;b:CubeColor;c:CubeColor;delta:number};
 export type ScanAssembly={state?:CubeState;invalid?:boolean};
-export type AssemblyInput={grids:[CubeColor,FaceGrid<CubeColor>][];edges:EdgeConstraint[];revision:number};
-export const reconstructScan=(input:AssemblyInput)=>assembleScan(new Map(input.grids),input.edges,input.revision);
+export type AssemblyInput={grids:[CubeColor,FaceGrid<CubeColor>][];edges:EdgeConstraint[];corners?:CornerConstraint[];revision:number};
+export const reconstructScan=(input:AssemblyInput)=>assembleScan(new Map(input.grids),input.edges,input.revision,input.corners);
 function permutations<T>(items:T[]):T[][] {
   if(!items.length)return [[]];
   return items.flatMap((item,i)=>permutations(items.filter((_,j)=>i!==j)).map(rest=>[item,...rest]));
@@ -56,7 +59,7 @@ function physicalKey(state:CubeState):string {
  * No assumed center scheme, face order, or visible neighboring pair is needed
  * when the captured pieces themselves determine the arrangement uniquely.
  */
-export function assembleScan(grids:ReadonlyMap<CubeColor,FaceGrid<CubeColor>>,edges:readonly EdgeConstraint[],revision:number):ScanAssembly {
+export function assembleScan(grids:ReadonlyMap<CubeColor,FaceGrid<CubeColor>>,edges:readonly EdgeConstraint[],revision:number,corners:readonly CornerConstraint[]=[]):ScanAssembly {
   if(grids.size!==6)return {};
   const first=edges[0],up=first?.a??grids.keys().next().value!;
   const remaining=[...grids.keys()].filter(c=>c!==up&&c!==first?.b);
@@ -65,6 +68,10 @@ export function assembleScan(grids:ReadonlyMap<CubeColor,FaceGrid<CubeColor>>,ed
     const centers:CenterMap=first?{U:up,F:first.b,R:other[0]!,D:other[1]!,L:other[2]!,B:other[3]!}
       :{U:up,F:other[0]!,R:other[1]!,D:other[2]!,L:other[3]!,B:other[4]!};
     const inverse=Object.fromEntries(FACES.map(f=>[centers[f],f])) as Record<CubeColor,Face>;
+    if(corners.some(c=>{
+      const ab=edgeToward(inverse[c.a],inverse[c.b]),ac=edgeToward(inverse[c.a],inverse[c.c]);
+      return ab===null||ac===null||(ac-ab+4)%4!==c.delta;
+    }))continue;
     const allowed=Object.fromEntries(FACES.map(f=>[f,!first&&f==='U'?[0]:[0,1,2,3]])) as Record<Face,number[]>;
     let valid=true;
     for(const e of edges){
@@ -82,9 +89,7 @@ export function assembleScan(grids:ReadonlyMap<CubeColor,FaceGrid<CubeColor>>,ed
       if(states.size>1)return;
       if(i===6){
         const s=facelets.join('');
-        // Six uniform faces require no turns, whatever the center arrangement.
-        // Session still requests fresh camera verification before declaring solved.
-        if(validateCube(s).valid){const state={facelets:s,centers,revision};states.set(s===SOLVED?SOLVED:physicalKey(state),state);}
+        if(validateCube(s).valid){const state={facelets:s,centers,revision};states.set(physicalKey(state),state);}
         return;
       }
       const f=order[i]!,offset=FACES.indexOf(f)*9;

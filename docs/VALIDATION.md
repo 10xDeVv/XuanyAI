@@ -1,6 +1,20 @@
 # Prototype validation record
 
-Updated October 14, 2026 (America/Toronto). **Physical acceptance remains incomplete.** The latest user-reported real-cube trial reached six captured faces but did not open a solution. The missing handoff was reproduced with six individual face observations. No Android/iPhone models or OS versions have been confirmed. The requested 9/10 capture and solve rates, one-second p95 turn confirmation, and zero false confirmations are unmeasured.
+Updated October 14, 2026 (America/Toronto). **Physical acceptance remains incomplete.** The user confirmed a complete real-cube solve after the six-face handoff fix, then reported a 34-step solution after making two easy moves. The exact moves and scanned state were not recorded. No Android/iPhone models or OS versions have been confirmed. The requested 9/10 capture and solve rates, one-second p95 turn confirmation, and zero false confirmations are unmeasured.
+
+## October 14: short solutions and symmetric scan orientation
+
+The pinned cubejs solver produced valid but needlessly long solutions without any camera involvement: one U turn returned 25 quarter-turn steps, and R U returned 16. Its two-phase search accepts a first solution rather than minimizing the displayed step count; its phase searches also start at depth one. Across all 324 pairs of outer face turns (including inverses and half turns), the former adapter needed up to 28 quarter turns. The user's exact 34-step case was not reproduced because its input is unavailable.
+
+Before Kociemba, the adapter now uses a bounded bidirectional breadth-first search for an exact shortest solution within six quarter turns. Each radius-three neighborhood has at most 1,195 states; the solved neighborhood is cached. All search edges cost one 90-degree turn, matching the guide. For more distant states, the existing Kociemba solver remains, followed by verified removal of subsequences whose effects have shorter equivalents. It does not claim globally optimal solutions outside the six-quarter-turn neighborhood. The original candidate, every shortcut's effect, and the final plan are applied and verified. No colors or scan state are adjusted to make a solution shorter. Everything runs in the existing local background worker/runtime.
+
+An independent one-sided BFS using cubejs verifies the optimal counts for all 18 one-turn inputs and all 324 two-turn inputs, including cancellation and half turns. The latter now require zero to four quarter turns. Sixty five-/six-quarter-turn inputs also receive verified short routes; twenty full scrambles solve correctly without increasing the original plan length. Local benchmark results are retained in `artifacts/short-solution-results.json`; desktop timings are not phone latency measurements.
+
+Reconstruction testing exposed a separate mirror ambiguity on already-uniform faces. Pairwise center adjacency alone loses handedness when face patterns are symmetric. The scanner now retains the cyclic order of three simultaneously visible neighboring centers, requiring the same stable-frame evidence as adjacency. These corner constraints are cleared on reset, reacquisition, or affected layer changes and participate in stale-result rejection. Uniform faces no longer bypass center-layout ambiguity. A retained 6/6 scan requests three sides meeting at a corner if that evidence is needed. All 324 two-turn inputs, varied first faces, and alternate center color schemes reconstruct matching physical views and retain a short solution.
+
+Validation: all 166 tests pass (158 public plus eight private screen-picture replays); strict TypeScript, the production web export, and sequential iOS/Android Hermes exports pass. A generated browser MediaStream carrying R U through the camera component, detector, scanner, background assembler, and solver opens a two-step 3D guide. Both steps reach a solved model; navigation remains adjacent to the cube at 390 CSS pixels. The count now explicitly says “90° turns.” No browser console errors were observed. Evidence: `artifacts/two-turn-solution.png` and `artifacts/two-turn-complete.png`.
+
+No detector, WASM, or native C++ changes were made. These checks do not replace a real-phone retest, and no installed native build/runtime test is claimed for this release.
 
 ## October 14: six-face capture to solution
 
@@ -38,7 +52,7 @@ Published browser build: https://point-scan-solve-10xdevv--k4m753isvb.expo.app (
 | --- | --- | --- |
 | TypeScript | Pass | `tsc --noEmit`, strict project settings |
 | Expo configuration/dependencies | 21/21 pass | `artifacts/build-logs/expo-doctor.log` |
-| Automated tests | 159/159 pass | October 14 capture handoff; 151 public tests plus eight private screenshot replays. Includes reconstruction without adjacent views, ambiguity/stale-result checks, actual worker dispatch, per-square capture evidence, camera color variation, capture cadence, cube invariants, solve verification, and wrong/obscured turn rejection. |
+| Automated tests | 166/166 pass | October 14 short-solution refinement; 158 public tests plus eight private screenshot replays. Includes exhaustive one-/two-turn quality checks, physical scan reconstruction of all two-turn combinations, symmetric orientation, ambiguity/stale-result checks, camera processing, cube invariants, and wrong/obscured turn rejection. |
 | Cube model and solver | Pass | All 18 legal turns compared with cubejs, inverse/invariant tests, 20 randomized solutions applied and verified |
 | Capture and tracking | Pass on synthetic observations | Arbitrary views, adjacency/orientation assembly, invalid state reacquisition, layer-change invalidation, wrong turns, ambiguity, stale results, and fresh six-face completion. Completion rejects a hidden last-face turn and discards earlier checks after blur or a frame gap. |
 | Compiled detector integration | Pass on synthetic pixels | Production C++/OpenCV WASM detects all three faces in four differently oriented views, reconstructs a known scramble, and identifies correct and alternative settled turns |

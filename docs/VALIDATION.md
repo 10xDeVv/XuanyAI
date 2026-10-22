@@ -14,6 +14,8 @@ At a 390×844 browser viewport, the generated camera stream traverses the real c
 
 Real-phone capture, off-center views, lighting changes, and sustained processing cadence remain to be measured. The centered detail view cannot recover a cube outside its bounds when the full-frame view is unreadable; a changed camera angle or an actual saved camera frame is still needed to diagnose such cases.
 
+Published: https://point-scan-solve-10xdevv--2awyzysuxk.expo.app (source `1d60ad8`), also on https://point-scan-solve-10xdevv--prototype.expo.app. Both application bundles and the hosted camera/solver assets match the tested export byte-for-byte. The published phone layout loads without browser console errors.
+
 ## October 15: reported laptop screenshot, center logo, and slow-frame recovery
 
 The supplied 1906×930 UI screenshot contains a usable 817×511 camera region. Replaying that crop reproduced rejection of its visible face: the logo reduced center confidence to about 0.61 (below the unchanged 0.65 capture threshold), and the orange sticker was classified as red. This screenshot is compressed/resized UI evidence, not the original webcam stream or a six-face trial. Crops and replay assets remain ignored/local and are not shipped or committed.

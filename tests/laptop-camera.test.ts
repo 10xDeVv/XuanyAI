@@ -17,14 +17,21 @@ async function worker(engine:any,clock=performance){
   return async(data:unknown)=>{await self.onmessage({data});return messages.pop();};
 }
 
-it('samples landscape detail from native video pixels and leaves portrait/pictures alone',()=>{
+it('samples bounded native detail in either orientation and leaves pictures full-frame',()=>{
   expect(cameraFrameSize(1280,720)).toEqual({width:960,height:540});
-  expect(cameraDetailRegion(1280,720)).toEqual({x:280,y:0,size:720,width:720,height:720});
-  expect(cameraDetailRegion(1920,1080)).toEqual({x:420,y:0,size:1080,width:960,height:960});
+  expect(cameraDetailRegion(1280,720)).toEqual({x:320,y:40,size:640,width:640,height:640});
+  expect(cameraDetailRegion(1920,1080)).toEqual({x:640,y:220,size:640,width:640,height:640});
   expect(cameraDetailRegion(640,480)).toMatchObject({width:480,height:480});
-  expect(cameraDetailRegion(720,1280)).toBeUndefined();
+  expect(cameraDetailRegion(720,1280)).toEqual({x:40,y:320,size:640,width:640,height:640});
+  expect(cameraDetailRegion(720,1280,false,480)).toEqual({x:120,y:400,size:480,width:480,height:480});
   expect(cameraDetailRegion(1280,720,true)).toBeUndefined();
 });
+
+function laptopDetail(pixels:Uint8Array){
+  const r=cameraDetailRegion(1280,720)!,{width,height}=cameraFrameSize(1280,720);
+  return {buffer:sampleWebcam(pixels,r.x,r.y,r.size,r.size,r.width,r.height).buffer,width:r.width,height:r.height,
+    x:r.x*width/1280,y:r.y*height/720,scaleX:width/1280,scaleY:height/720};
+}
 
 it('reduces a slow physical workload without oscillating or reducing picture detail',()=>{
   const budget=new CameraProcessingBudget();
@@ -48,7 +55,7 @@ describe.skipIf(!existsSync('public/vision/cube-vision.wasm'))('landscape webcam
   it.each([40,48])('recovers a %i-pixel face from measured detail that the reduced frame rejects',async size=>{
     const run=await worker(await require('../public/vision/cube-vision.js')()),source=laptopFrame('F',size);
     const buffer=sampleWebcam(source.pixels,0,0,1280,720,960,540).buffer;
-    const detail={buffer:sampleWebcam(source.pixels,280,0,720,720,720,720).buffer,width:720,height:720,x:210,y:0,scaleX:.75,scaleY:.75};
+    const detail=laptopDetail(source.pixels);
     const frame={type:'frame',id:11,timestamp:321,width:960,height:540,buffer};
     const baseline=await run(frame);expect(baseline.type).toBe('observation');expect(baseline.faces.filter(reliableFace)).toHaveLength(0);
     const recovered=await run({...frame,detail});expect(recovered).toMatchObject({type:'observation',id:11,timestamp:321,width:960,height:540});
@@ -64,7 +71,7 @@ describe.skipIf(!existsSync('public/vision/cube-vision.wasm'))('landscape webcam
   it('still rejects a covered face through the detail retry',async()=>{
     const run=await worker(await require('../public/vision/cube-vision.js')()),source=laptopFrame('F',48,true);
     const result=await run({type:'frame',id:1,timestamp:0,width:960,height:540,buffer:sampleWebcam(source.pixels,0,0,1280,720,960,540).buffer,
-      detail:{buffer:sampleWebcam(source.pixels,280,0,720,720,720,720).buffer,width:720,height:720,x:210,y:0,scaleX:.75,scaleY:.75}});
+      detail:laptopDetail(source.pixels)});
     expect(result.type).toBe('observation');expect(result.faces.filter(reliableFace)).toHaveLength(0);
   });
   it('finishes a known webcam scan that the full-frame-only path leaves incomplete',async()=>{
@@ -72,7 +79,7 @@ describe.skipIf(!existsSync('public/vision/cube-vision.wasm'))('landscape webcam
     let timestamp=0,before,after;const measured:CubeObservation[]=[];
     for(const face of FACES){
       const source=laptopFrame(face,80),frame={type:'frame',id:1,timestamp:0,width:960,height:540,buffer:sampleWebcam(source.pixels,0,0,1280,720,960,540).buffer};
-      const full=await run(frame),detail={buffer:sampleWebcam(source.pixels,280,0,720,720,720,720).buffer,width:720,height:720,x:210,y:0,scaleX:.75,scaleY:.75};
+      const full=await run(frame),detail=laptopDetail(source.pixels);
       const recovered=await run({...frame,detail});expect(recovered.type).toBe('observation');
       const o={...source.observation,...recovered,transform:{...source.observation.transform,frameWidth:960,frameHeight:540}} as CubeObservation;
       expect(matchObservation(laptopCube,o)).not.toBeNull();measured.push(o);
@@ -85,10 +92,10 @@ describe.skipIf(!existsSync('public/vision/cube-vision.wasm'))('landscape webcam
   });
 });
 
-it('never replaces a clear full-frame view, a picture, or an unsupported grid with a crop',async()=>{
+it('does not retry a complete three-sided view, a picture, or an unsupported grid',async()=>{
   const clear=laptopFrame().observation.faces[0]!;
   for(const [result,picture] of [
-    [{faces:[clear]},false], [{faces:[]},true], [{faces:[],largerGrid:true},false], [{faces:Array(4).fill({...clear,sharpness:0})},false],
+    [{faces:[clear,clear,clear]},false], [{faces:[]},true], [{faces:[],largerGrid:true},false], [{faces:Array(4).fill({...clear,sharpness:0})},false],
   ] as const){
     let calls=0;
     const engine={HEAPU8:new Uint8Array(64*64*4),_malloc:()=>0x10,_free:()=>{},detectRGBA:()=>{calls++;return JSON.stringify(result);},detectPictureRGBA:()=>{calls++;return JSON.stringify(result);}};

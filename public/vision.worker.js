@@ -2,7 +2,27 @@
 let engine=null,ptr=0,capacity=0;
 const version=new URL(self.location.href).searchParams.get('v');
 const asset=name=>'/vision/'+name+(version?'?v='+encodeURIComponent(version):'');
-const clearFaces=result=>result.faces.filter(f=>f.confidence.every(c=>c>=.65)&&f.glare<.22&&f.sharpness>=18).length;
+const clearFace=f=>f.confidence.every(c=>c>=.65)&&f.glare<.22&&f.sharpness>=18;
+const clearFaces=result=>result.faces.filter(clearFace).length;
+const center=f=>f.quad.reduce((p,q)=>({x:p.x+q.x/4,y:p.y+q.y/4}),{x:0,y:0});
+const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const clockwise=[6,3,0,7,4,1,8,5,2];
+// Replacing a partial view must retain every already-readable face, in the
+// same location and orientation. Never merge conflicting color readings.
+function preservesFaces(full,focused){
+  return full.faces.filter(clearFace).every(face=>{
+    const edge=face.quad.reduce((sum,p,i)=>sum+distance(p,face.quad[(i+1)%4]),0)/4;
+    return focused.faces.filter(clearFace).some(next=>{
+      if(distance(center(face),center(next))>edge*.25)return false;
+      const errors=[0,1,2,3].map(r=>face.quad.reduce((sum,p,i)=>sum+distance(p,next.quad[(i+r)%4]),0)/4);
+      const rotation=errors.indexOf(Math.min(...errors));
+      if(errors[rotation]>edge*.20)return false;
+      let colors=next.colors;
+      for(let r=0;r<(4-rotation)%4;r++)colors=clockwise.map(i=>colors[i]);
+      return colors.every((c,i)=>c===face.colors[i]);
+    });
+  });
+}
 function readFrame(buffer,width,height,picture=false){
   if(!Number.isInteger(width)||!Number.isInteger(height)||width<32||height<32||width>1920||height>1920||buffer.byteLength!==width*height*4)throw new Error('Invalid camera frame.');
   const bytes=new Uint8Array(buffer);
@@ -38,23 +58,22 @@ self.onmessage=async({data})=>{
     if(data.type!=='frame')return;
     const started=performance.now();
     let result=readFrame(data.buffer,data.width,data.height,data.picture);
-    // A laptop's wide view often leaves the cube small after reduction, or
-    // fills the region budget with background edges. Retry original center
-    // pixels only when the full frame has no clear physical face. Never lower
-    // quality thresholds or combine observations from the two views.
+    // Reducing a phone frame can leave only one or two of its visible sides
+    // readable. Try original center pixels even for a partial successful view.
+    // A complete three-sided view needs no extra work.
     const d=data.detail;
     // Leave time to deliver the result. A slow full pass must not trigger
     // another expensive pass that guarantees a stale observation; the camera
     // adapts the next request's resolution using total elapsed time.
-    if(d&&!data.picture&&!result.largerGrid&&result.faces.length<=3&&!clearFaces(result)&&performance.now()-started<450){
+    if(d&&!data.picture&&!result.largerGrid&&result.faces.length<=3&&clearFaces(result)<3&&performance.now()-started<450){
       if(![d.x,d.y,d.scaleX,d.scaleY].every(Number.isFinite)||d.x<0||d.y<0||d.scaleX<=0||d.scaleY<=0||
         d.x+d.width*d.scaleX>data.width+.01||d.y+d.height*d.scaleY>data.height+.01)throw new Error('Invalid camera detail region.');
       const focused=readFrame(d.buffer,d.width,d.height);
-      if(!focused.largerGrid&&focused.faces.length<=3&&clearFaces(focused)>0){
+      if(!focused.largerGrid&&focused.faces.length<=3&&clearFaces(focused)>clearFaces(result)){
         for(const face of focused.faces)face.quad=face.quad.map(p=>({x:d.x+p.x*d.scaleX,y:d.y+p.y*d.scaleY}));
         // Keep geometry in the full frame's coordinates for preview overlays,
         // adjacency, and temporal checks, even when switching between passes.
-        result={...focused,width:data.width,height:data.height};
+        if(preservesFaces(result,focused))result={...focused,width:data.width,height:data.height};
       }
     }
     result.processingMs=performance.now()-started;

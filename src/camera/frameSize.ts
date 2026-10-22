@@ -5,14 +5,13 @@ export function cameraFrameSize(sourceWidth:number,sourceHeight:number,picture=f
   return {width:Math.round(sourceWidth*scale),height:Math.round(sourceHeight*scale)};
 }
 
-/** A second view of the center of a landscape webcam frame, sampled directly
- * from the video. Cropping the already reduced frame would add no detail.
- * Full-frame detection always runs first, preserving pictures and edge views.
- */
+/** Preserve native sticker pixels in a bounded center region on phones and
+ * laptops. A slower device gets a smaller search area, not smaller stickers.
+ * The full view still runs first, retaining pictures and off-center cubes. */
 export function cameraDetailRegion(sourceWidth:number,sourceHeight:number,picture=false,physicalLimit=960){
-  if(picture||sourceWidth<sourceHeight*1.2||sourceHeight<32)return undefined;
-  const size=Math.min(sourceWidth,sourceHeight),{width,height}=cameraFrameSize(size,size,false,physicalLimit);
-  return {x:Math.floor((sourceWidth-size)/2),y:0,size,width,height};
+  if(picture||Math.min(sourceWidth,sourceHeight)<32)return undefined;
+  const size=Math.min(sourceWidth,sourceHeight,physicalLimit,640);
+  return {x:Math.floor((sourceWidth-size)/2),y:Math.floor((sourceHeight-size)/2),size,width:size,height:size};
 }
 
 /** Reduce work after a slow physical frame instead of discarding the same

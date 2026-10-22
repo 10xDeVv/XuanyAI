@@ -18,13 +18,13 @@ export function laptopFrame(face:Face='F',size=48,covered=false){
 }
 
 /** Area sampling is an independent stand-in for the browser canvas reduction. */
-export function sampleWebcam(src:Uint8Array,x0:number,y0:number,cw:number,ch:number,w:number,h:number){
+export function sampleWebcam(src:Uint8Array,x0:number,y0:number,cw:number,ch:number,w:number,h:number,sourceWidth=1280){
   const out=new Uint8Array(w*h*4);
   for(let y=0;y<h;y++)for(let x=0;x<w;x++){
     const x1=x0+x*cw/w,x2=x0+(x+1)*cw/w,y1=y0+y*ch/h,y2=y0+(y+1)*ch/h,sum=[0,0,0];
     for(let sy=Math.floor(y1);sy<Math.ceil(y2);sy++)for(let sx=Math.floor(x1);sx<Math.ceil(x2);sx++){
       const weight=(Math.min(sx+1,x2)-Math.max(sx,x1))*(Math.min(sy+1,y2)-Math.max(sy,y1));
-      for(let c=0;c<3;c++)sum[c]!+=src[(sy*1280+sx)*4+c]!*weight;
+      for(let c=0;c<3;c++)sum[c]!+=src[(sy*sourceWidth+sx)*4+c]!*weight;
     }
     out.set([...sum.map(v=>Math.round(v/((x2-x1)*(y2-y1)))),255],(y*w+x)*4);
   }
